@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter as FontSans } from 'next/font/google'
 import './globals.css'
+import Providers from '@/app/providers'
 
 const fontSans = FontSans({ subsets: ['latin'], variable: '--font-sans' })
 
@@ -11,7 +12,9 @@ export default function RootLayout({
 }>) {
     return (
         <html lang="fr">
-            <body className={`${fontSans.variable} antialiased`}>{children}</body>
+            <body className={`${fontSans.variable} antialiased`}>
+                <Providers>{children}</Providers>
+            </body>
         </html>
     )
 }

@@ -99,7 +99,7 @@ export const App = () => {
                                 height={27}
                                 alt="Header image"
                             />
-                            Dossier PDF
+                            Dossier PDF sécurisé
                         </h1>
                         <div className="space-y-4 text-center">
                             <p>Ajoutez un texte en filigrane sur les pièces de votre dossier.</p>
