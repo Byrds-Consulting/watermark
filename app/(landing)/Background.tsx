@@ -1,7 +1,6 @@
-import Image from 'next/image'
-import { App } from '@/app/App'
+import { PropsWithChildren } from 'react'
 
-export default function Home() {
+export default function Background({ children }: PropsWithChildren) {
     return (
         <div className="min-h-screen relative overflow-hidden">
             {/* Background */}
@@ -16,7 +15,7 @@ export default function Home() {
                 <div className="absolute left-1/3 top-1/3 -translate-x-[45%] -translate-y-[5%] w-[500px] h-[500px] bg-[#3CDC1E] opacity-15 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
             </div>
             <div className="relative grid items-center justify-items-center min-h-screen gap-16 font-[family-name:var(--font-geist-sans)]">
-                <App />
+                {children}
             </div>
         </div>
     )

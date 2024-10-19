@@ -35,12 +35,12 @@ export function FileDropzone({ onFile }: { onFile: (files: File[]) => void }) {
     )
 
     return (
-        <div className="w-full max-w-md mx-auto">
+        <div className="w-full mx-auto">
             <div
                 className={cn(
-                    'border-[1px] border-dashed border-black/50 rounded-lg p-8 text-center cursor-pointer hover:border-[#3CDC1E] bg-white/15 hover:bg-white/20 transition-colors',
+                    'border-[1px] border-dashed border-black/50 rounded-lg p-8 pb-0 text-center cursor-pointer hover:border-[#3CDC1E] bg-white/15 hover:bg-[#d7fbcc]/15 transition-colors',
                     {
-                        'bg-white/20': dragOver,
+                        'bg-[#d7fbcc]/15': dragOver,
                         'border-[#3CDC1E]': dragOver,
                     },
                 )}
@@ -53,14 +53,19 @@ export function FileDropzone({ onFile }: { onFile: (files: File[]) => void }) {
                     id="fileInput"
                     className="hidden"
                     onChange={handleFileInput}
-                    accept="*/*"
+                    // accept="*/*"
+                    // accept="image/jpeg,image/gif,image/png,application/pdf,image/x-eps"
+                    accept="application/pdf"
                 />
                 <label htmlFor="fileInput" className="cursor-pointer">
                     <ArrowUpTrayIcon className="mx-auto mb-4 h-8 w-8" />
-                    <p className="mt-2 text-sm">
-                        Drag and drop votre fichier, ou sélectionnez un file
-                    </p>
+                    <p className="mt-2 text-sm">Sélectionnez un fichier</p>
                 </label>
+
+                <p className="text-xs text-center opacity-50 py-4">
+                    Seuls les PDFs sont supportés actuellement, les .zip, .jpeg et .png seront
+                    bientôt ajoutés
+                </p>
             </div>
         </div>
     )

@@ -11,7 +11,10 @@ import {
 const cos45 = 0.70710678119
 const sin45 = 0.70710678119
 
-export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text: string) {
+export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
+    while (text.length < 10) {
+        text = ` ${text} `
+    }
     //   const url = 'https://pdf-lib.js.org/assets/with_update_sections.pdf'
     //   const existingPdfBytes = await fetch(url).then(res => res.arrayBuffer())
 
@@ -44,7 +47,7 @@ export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text: string
             fontSize: size,
             bounds: { x: 0, y: 0, width: 10000, height: 10000 },
         })
-        const multilineWidth = multiText.lines.reduce((res, str) => Math.max(res, str.width), 0)
+        const maxMultilineWidth = multiText.lines.reduce((res, str) => Math.max(res, str.width), 0)
 
         const textOptions: PDFPageDrawTextOptions & {
             x: number
@@ -52,31 +55,50 @@ export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text: string
             size: number
             lineHeight: number
         } = {
-            x: (width - (multilineWidth + size) * cos45) / 2,
+            x: (width - (maxMultilineWidth + size) * cos45) / 2,
             y: height / 2,
             size,
             font: helveticaFont,
             lineHeight: size,
-            color: rgb(0.95, 0.1, 0.1),
-            opacity: 0.5,
+            // color: rgb(0.95, 0.1, 0.1),
+            color: rgb(1, 0, 0),
+            opacity: 0.25,
             wordBreaks: [' '],
             rotate: degrees(-45),
         }
-        const lines = 5
+        const lines = 6
         for (const n of Array(lines).keys()) {
             for (let i = 0; i < multiText.lines.length; i++) {
-                const xOffset = (multilineWidth - multiText.lines[i].width) / 2
+                const xOffset = Math.abs(maxMultilineWidth - multiText.lines[i].width) / 2
                 page.drawText(`${multiText.lines[i].text}`, {
                     ...textOptions,
-                    x: textOptions.x + (xOffset - i * textOptions.lineHeight) * cos45,
+
+                    // Centered as a block
+                    // x: textOptions.x + (xOffset - i * textOptions.lineHeight) * cos45,
+                    // y:
+                    //     textOptions.y -
+                    //     (xOffset + i * textOptions.lineHeight) * sin45 -
+                    //     ((n - lines / 2) * height) / (lines - 3),
+
+                    // Centered line by line
+                    x: textOptions.x + xOffset * cos45,
                     y:
                         textOptions.y -
-                        (xOffset + i * textOptions.lineHeight) * sin45 -
+                        (xOffset + 2 * i * textOptions.lineHeight) * sin45 -
                         ((n - lines / 2) * height) / (lines - 3),
                 })
             }
         }
     }
+
+    pdfDoc.setTitle('Dossier PDF avec watermark')
+    pdfDoc.setAuthor('Byrds Consulting')
+    pdfDoc.setSubject('Dossier')
+    pdfDoc.setKeywords(['dossier', 'pdf', 'watermark'])
+    pdfDoc.setProducer('Dossier PDF')
+    pdfDoc.setCreator('Dossier PDF (https://dossierpdf.fr)')
+    pdfDoc.setCreationDate(new Date())
+    pdfDoc.setModificationDate(new Date())
 
     const pdfBytes = await pdfDoc.save()
     return pdfBytes
