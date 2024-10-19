@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  app:
+    init: true
+    image: ghcr.io/byrds-consulting/watermark:main
+    networks:
+      - loadbalancer
+    environment:
+      SERVER_DOMAIN: dossierpdf.fr
+
+networks:
+  loadbalancer:
+    external: true

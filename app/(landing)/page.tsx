@@ -11,8 +11,8 @@ export default function Home() {
 }
 
 export const metadata: Metadata = {
-    title: 'Byrds Consulting',
-    description: 'Welcome to Byrds Consulting',
+    title: 'Mon dossier PDF sécurisé',
+    description: 'Ajouter un texte en filigrane sur votre dossier PDF',
     alternates: {
         canonical: `/`,
         languages: { 'x-default': '/' },

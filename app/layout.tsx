@@ -25,11 +25,6 @@ export const viewport = {
 
 export const metadata: Metadata = {
     metadataBase: new URL('https://dossierpdf.fr'),
-    title: {
-        default: 'Dossier PDF',
-        template: `%s | Dossier PDF`,
-    },
-    description: 'Ajouter un texte en filigrane sur votre dossier PDF',
     keywords:
         'dossier, pdf, filigrane, local, navigateur, sécurisé, sécurité, immobilier, location, identité, vol',
     authors: [
