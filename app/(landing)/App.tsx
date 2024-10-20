@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { useForm } from 'react-hook-form'
 import React, { useCallback, useEffect, useState } from 'react'
+import { usePlausible } from 'next-plausible'
 
 import { PDFDocument } from 'pdf-lib'
 import { FileDropzone } from '@/app/(landing)/FileDropzone'
@@ -28,6 +29,7 @@ export const App = () => {
     const [finalPDF, setFinalPDF] = useState<Uint8Array | null>(null)
     const [isReady, setReady] = useState<boolean>(false)
     const { register, handleSubmit, watch } = useForm()
+    const plausible = usePlausible()
 
     const watermarkText = watch('watermark')
 
@@ -35,6 +37,7 @@ export const App = () => {
         (acceptedFiles: File[]) => {
             const file = acceptedFiles[0]
             if (file) {
+                plausible('File upload')
                 const reader = new FileReader()
                 reader.onload = async (event) => {
                     const buffer = event.target?.result
@@ -63,6 +66,7 @@ export const App = () => {
     }, [buffer, watermarkText])
 
     const downloadPDF = useCallback(async () => {
+        plausible('File download')
         const allPages = document.querySelectorAll<HTMLCanvasElement>('.react-pdf__Page__canvas')
         if (allPages.length <= 0) return
 
