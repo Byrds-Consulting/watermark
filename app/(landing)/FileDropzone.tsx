@@ -55,7 +55,7 @@ export function FileDropzone({ onFile }: { onFile: (files: File[]) => void }) {
                     onChange={handleFileInput}
                     // accept="*/*"
                     // accept="image/jpeg,image/gif,image/png,application/pdf,image/x-eps"
-                    accept="application/pdf"
+                    accept="application/pdf,application/zip"
                 />
                 <label htmlFor="fileInput" className="cursor-pointer">
                     <ArrowUpTrayIcon className="mx-auto mb-4 h-8 w-8" />
