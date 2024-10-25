@@ -14,7 +14,6 @@ import { test_downloadByteArray, test_modifyPdf } from '@/lib/pdf'
 import dynamic from 'next/dynamic'
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
-import { arrayBuffer } from 'stream/consumers'
 
 const intl = new Intl.DateTimeFormat('fr-FR')
 
@@ -40,7 +39,7 @@ async function processFileBuffer(
         const zipFileReader = new zip.BlobReader(blob)
         const zipReader = new zip.ZipReader(zipFileReader)
         for (const fileEntry of await zipReader.getEntries()) {
-            console.log('firstEntry:', fileEntry?.filename)
+            console.log('Zip file entry:', fileEntry?.filename)
             const uintArrayWriter = new zip.Uint8ArrayWriter()
             const pdfFile = await fileEntry?.getData?.(uintArrayWriter)
             if (pdfFile) {
@@ -149,7 +148,7 @@ export const App = () => {
         }
         const pdfBytes = await pdfDoc.save()
         test_downloadByteArray('pdflib-created.pdf', pdfBytes)
-    }, [])
+    }, [plausible])
 
     return (
         <div className="flex w-full gap-8 h-screen">
