@@ -2,9 +2,11 @@ import type { Metadata } from 'next'
 import { Inter as FontSans } from 'next/font/google'
 import './globals.css'
 import Providers from '@/app/providers'
+import dynamic from 'next/dynamic'
 
 const fontSans = FontSans({ subsets: ['latin'], variable: '--font-sans' })
 
+const CrispChat = dynamic(() => import('@/components/crisp/CrispChat'))
 export default function RootLayout({
     children,
 }: Readonly<{
@@ -14,6 +16,7 @@ export default function RootLayout({
         <html lang="fr">
             <body className={`${fontSans.variable} antialiased`}>
                 <Providers>{children}</Providers>
+                <CrispChat lang="fr" />
             </body>
         </html>
     )
