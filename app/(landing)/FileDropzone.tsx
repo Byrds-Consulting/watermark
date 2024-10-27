@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useCallback, useState } from 'react'
-import { ArrowUpTrayIcon } from '@heroicons/react/24/outline'
+import { DocumentArrowUpIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/utils'
 
 export function FileDropzone({ onFile }: { onFile: (files: File[]) => void }) {
@@ -58,13 +58,12 @@ export function FileDropzone({ onFile }: { onFile: (files: File[]) => void }) {
                     accept="application/pdf,application/zip"
                 />
                 <label htmlFor="fileInput" className="cursor-pointer">
-                    <ArrowUpTrayIcon className="mx-auto mb-4 h-8 w-8" />
+                    <DocumentArrowUpIcon className="mx-auto mb-4 h-8 w-8" />
                     <p className="mt-2 text-sm">Sélectionnez un fichier</p>
                 </label>
 
                 <p className="text-xs text-center opacity-50 py-4">
-                    Seuls les PDFs sont supportés actuellement, les .zip, .jpeg et .png seront
-                    bientôt ajoutés
+                    Les fichiers PDF, Zip, JPEG et PNG sont supportés
                 </p>
             </div>
         </div>

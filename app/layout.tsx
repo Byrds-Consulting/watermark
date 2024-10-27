@@ -60,6 +60,17 @@ export const metadata: Metadata = {
         creator: '@theolubert',
     },
     icons: {
-        icon: '/icon.png',
+        icon: [
+            {
+                media: '(prefers-color-scheme: light)',
+                url: '/img/icon.png',
+                href: '/img/icon.png',
+            },
+            {
+                media: '(prefers-color-scheme: dark)',
+                url: '/img/icon-dark.png',
+                href: '/img/icon-dark.png',
+            },
+        ],
     },
 }

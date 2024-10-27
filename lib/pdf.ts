@@ -11,6 +11,15 @@ import {
 const cos45 = 0.70710678119
 const sin45 = 0.70710678119
 
+async function loadPDF(existingPdfBytes: ArrayBuffer) {
+    // try {
+    return await PDFDocument.load(existingPdfBytes)
+    // } catch (err) {
+    //     console.error('Encrypted file')
+    //     return await PDFDocument.load(existingPdfBytes, { ignoreEncryption: true })
+    // }
+}
+
 export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
     while (text.length < 10) {
         text = ` ${text} `
@@ -18,7 +27,7 @@ export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
     //   const url = 'https://pdf-lib.js.org/assets/with_update_sections.pdf'
     //   const existingPdfBytes = await fetch(url).then(res => res.arrayBuffer())
 
-    const pdfDoc = await PDFDocument.load(existingPdfBytes)
+    const pdfDoc = await loadPDF(existingPdfBytes)
     const helveticaFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
 
     const pages = pdfDoc.getPages()
@@ -66,7 +75,7 @@ export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
             wordBreaks: [' '],
             rotate: degrees(-45),
         }
-        const lines = 6
+        const lines = Math.max(4, Math.ceil((4 * page.getHeight()) / page.getWidth())) // 6
         for (const n of Array(lines).keys()) {
             for (let i = 0; i < multiText.lines.length; i++) {
                 const xOffset = Math.abs(maxMultilineWidth - multiText.lines[i].width) / 2

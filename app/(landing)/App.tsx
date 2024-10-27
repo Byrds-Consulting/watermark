@@ -12,8 +12,9 @@ import { PDFDocument } from 'pdf-lib'
 import { FileDropzone } from '@/app/(landing)/FileDropzone'
 import { test_downloadByteArray, test_modifyPdf } from '@/lib/pdf'
 import dynamic from 'next/dynamic'
-import { ArrowDownTrayIcon } from '@heroicons/react/24/outline'
+import { ArrowDownCircleIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
+import { DocumentTextIcon } from '@heroicons/react/24/outline'
 
 const intl = new Intl.DateTimeFormat('fr-FR')
 
@@ -65,6 +66,23 @@ async function processFileBuffer(
         const pdf = await test_modifyPdf(buffer, watermarkText)
         fileNameArray.push(fileName)
         pdfArray.push(pdf)
+    } else if (fileType === 'image/jpeg' || fileType === 'image/png') {
+        const pdfDoc = await PDFDocument.create()
+        const image =
+            fileType === 'image/png' ? await pdfDoc.embedPng(buffer) : await pdfDoc.embedJpg(buffer)
+        const imgDims = image.size()
+        const page = pdfDoc.addPage([imgDims.width, imgDims.height])
+        // const imgDims = image.scaleToFit(page.getWidth(), page.getHeight())
+        page.drawImage(image, {
+            x: page.getWidth() / 2 - imgDims.width / 2,
+            y: page.getHeight() / 2 - imgDims.height / 2,
+            width: imgDims.width,
+            height: imgDims.height,
+        })
+        const pdfBytes = await pdfDoc.save()
+        const pdf = await test_modifyPdf(pdfBytes, watermarkText)
+        fileNameArray.push(fileName)
+        pdfArray.push(pdf)
     } else {
         // TODO: should transform and rename .png|jpg|etc to .pdf
         console.log(`Unknown file type "${fileType}"`)
@@ -77,7 +95,6 @@ async function processAllFiles(
     watermarkText: string,
 ): Promise<[string | null, string[], Uint8Array[]]> {
     const fileNameArray: string[] = []
-    const fileArray: ArrayBuffer[] = []
     const pdfArray: Uint8Array[] = []
     for (const file of files) {
         console.log(file)
@@ -99,10 +116,8 @@ async function processAllFiles(
         fileNameArray.push(...fileNames)
         pdfArray.push(...pdfs)
     }
-    if (files.length > 0 && files[0].type === 'application/zip') {
+    if (files.length === 1 && files[0].type === 'application/zip') {
         return [files[0].name, fileNameArray, pdfArray]
-        // } else if (pdfArray.length > 1) {
-        //     return [`dossier_${intl.format(new Date())}.zip`, fileNameArray, pdfArray]
     }
     return [null, fileNameArray, pdfArray]
 }
@@ -199,7 +214,7 @@ export const App = () => {
                 <main className="flex flex-col gap-8 items-center w-full min-h-full">
                     <div className="flex flex-col gap-8 items-center max-w-lg">
                         <h1 className="text-4xl font-bold">
-                            <Image
+                            {/* <Image
                                 priority
                                 aria-hidden
                                 className="inline align-baseline mx-2 top-[1px] relative"
@@ -208,7 +223,8 @@ export const App = () => {
                                 width={27}
                                 height={27}
                                 alt="Header image"
-                            />
+                            /> */}
+                            <DocumentTextIcon className="inline align-baseline mx-2 top-[2px] relative w-[30px]" />
                             Dossier PDF sécurisé
                         </h1>
                         <div className="space-y-4 text-center">
@@ -255,7 +271,7 @@ export const App = () => {
                                         disabled={!isReady}
                                         type="submit"
                                     >
-                                        <ArrowDownTrayIcon className="mx-auto mr-2 h-6 w-6" />
+                                        <ArrowDownCircleIcon className="mx-auto mr-2 h-6 w-6" />
                                         Télécharger le dossier
                                     </Button>
                                 ) : null}
@@ -284,7 +300,8 @@ export const App = () => {
             <div className="basis-2/5 w-full overflow-y-auto overflow-x-hidden max-h-full">
                 <div className="mt-16 pr-8 w-[120%]">
                     {pdfArray.length > 0 ? (
-                        pdfArray.map(([fileName, buffer], idx) =>
+                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                        pdfArray.map(([_fileName, buffer], idx) =>
                             idx === 0 ? (
                                 <PDFViewer
                                     key={idx}
