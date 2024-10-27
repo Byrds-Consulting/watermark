@@ -40,14 +40,9 @@ export default function PDFViewer({
                     // 'https://raw.githubusercontent.com/wojtekmaj/react-pdf/5bcddeb2255712c4f261104f0d62d51005039e25/sample/next-app/public/sample.pdf' ??
                     'sample.pdf'
                 }
-                // onLoadStart={(e) => console.log('Start', e)}
                 onLoadSuccess={(e) => {
-                    // console.log('Success', e)
-                    // console.log('Success', e._pdfInfo.numPages)
                     setNumPages(e._pdfInfo.numPages)
                 }}
-                // onLoadError={(e) => console.log('Load error', e)}
-                // onSourceError={(e) => console.log('Source error', e)}
             >
                 {Array.from(
                     new Array(

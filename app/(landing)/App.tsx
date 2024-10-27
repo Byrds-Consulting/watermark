@@ -42,7 +42,6 @@ async function processFileBuffer(
         const zipReader = new zip.ZipReader(zipFileReader)
         for (const fileEntry of await zipReader.getEntries()) {
             if (!fileEntry) continue
-            console.log('Zip file entry:', fileEntry.filename)
             const uintArrayWriter = new zip.Uint8ArrayWriter()
             const pdfFile = await fileEntry.getData?.(uintArrayWriter)
             if (pdfFile) {
@@ -57,7 +56,7 @@ async function processFileBuffer(
                     fileNameArray.push(...fileNames)
                     pdfArray.push(...pdfs)
                 } else {
-                    console.log(`Unknown file type for "${fileEntry.filename}"`)
+                    console.log(`Ignoring: Unknown file type for "${fileEntry.filename}"`)
                 }
             }
         }
@@ -81,11 +80,10 @@ async function processFileBuffer(
         })
         const pdfBytes = await pdfDoc.save()
         const pdf = await test_modifyPdf(pdfBytes, watermarkText)
-        fileNameArray.push(fileName)
+        fileNameArray.push(fileName.replace(/\.(jpg|jpeg|png)$/i, '.pdf'))
         pdfArray.push(pdf)
     } else {
-        // TODO: should transform and rename .png|jpg|etc to .pdf
-        console.log(`Unknown file type "${fileType}"`)
+        console.log(`Ignoring: Unknown file type for "${fileName}" (${fileType})`)
     }
     return [fileNameArray, pdfArray]
 }
@@ -97,7 +95,6 @@ async function processAllFiles(
     const fileNameArray: string[] = []
     const pdfArray: Uint8Array[] = []
     for (const file of files) {
-        console.log(file)
         const reader = new FileReader()
         reader.readAsArrayBuffer(file)
         const [fileNames, pdfs] = await new Promise<Awaited<ReturnType<typeof processFileBuffer>>>(
@@ -129,8 +126,7 @@ export const App = () => {
     const watermarkText = watch('watermark')
     const plausible = usePlausible()
 
-    const isReady = !!pdfArray[0]
-    console.log('files:', pdfArray.map(([fileName]) => fileName).join('\n'))
+    const isReady = pdfArray.length > 0
 
     const onDrop = useCallback(
         async (acceptedFiles: File[]) => {
@@ -166,7 +162,11 @@ export const App = () => {
         plausible('File download')
 
         // PDF Creation
-        async function pdfFromCanvas(allPages: NodeListOf<HTMLCanvasElement>) {
+        async function pdfFromCanvas(fileName: string, idx: number) {
+            const allPages = document.querySelectorAll<HTMLCanvasElement>(
+                `.pdf_${idx} .react-pdf__Page__canvas`,
+            )
+            console.warn(`[${idx}] PDF render:`, fileName, `(${allPages.length} pages`)
             const pdfDoc = await PDFDocument.create()
             for (const canvas of allPages) {
                 const base64 = canvas.toDataURL('image/jpeg', 0.3)
@@ -185,11 +185,7 @@ export const App = () => {
         if (originalFileName || pdfArray.length > 1) {
             const zipWriter = new zip.ZipWriter(new zip.BlobWriter('application/zip'))
             for (const [idx, [fileName]] of pdfArray.entries()) {
-                const allPages = document.querySelectorAll<HTMLCanvasElement>(
-                    `.pdf_${idx} .react-pdf__Page__canvas`,
-                )
-                console.warn(`[${idx}] Download:`, fileName, allPages.length)
-                const pdfBytes = await pdfFromCanvas(allPages)
+                const pdfBytes = await pdfFromCanvas(fileName, idx)
                 await zipWriter.add(fileName, new zip.Uint8ArrayReader(pdfBytes))
             }
             const zipFileBlob = await zipWriter.close()
@@ -199,11 +195,7 @@ export const App = () => {
             )
         } else if (pdfArray.length > 0) {
             const [fileName] = pdfArray[0]
-            const allPages = document.querySelectorAll<HTMLCanvasElement>(
-                '.pdf_0 .react-pdf__Page__canvas',
-            )
-            console.warn(`[0] Download:`, fileName, allPages.length)
-            const pdfBytes = await pdfFromCanvas(allPages)
+            const pdfBytes = await pdfFromCanvas(fileName, 0)
             test_downloadByteArray(fileName, pdfBytes)
         }
     }, [originalFileName, pdfArray, plausible])

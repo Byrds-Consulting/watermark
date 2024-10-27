@@ -14,6 +14,7 @@ const sin45 = 0.70710678119
 async function loadPDF(existingPdfBytes: ArrayBuffer) {
     // try {
     return await PDFDocument.load(existingPdfBytes)
+    // TODO: Handles errors gracefully (ex: alert if a pdf is password protected)
     // } catch (err) {
     //     console.error('Encrypted file')
     //     return await PDFDocument.load(existingPdfBytes, { ignoreEncryption: true })
@@ -31,23 +32,9 @@ export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
     const helveticaFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
 
     const pages = pdfDoc.getPages()
-    // const firstPage = pages[0]
     for (const page of pages) {
         const { width, height } = page.getSize()
         const textMaxLength = text.split('\n').reduce((res, str) => Math.max(res, str.length), 0)
-        // const centeredText = text
-        //     .split('\n')
-        //     .map((str) => {
-        //         console.log(
-        //             str,
-        //             str.length,
-        //             textMaxWidth,
-        //             Math.round(Math.abs(str.length - textMaxWidth) / 2),
-        //         )
-        //         const whiteSpaces = Array(Math.round(Math.abs(str.length - textMaxWidth) / 2))
-        //         return `${whiteSpaces.join(' ')}${str}${whiteSpaces.join(' ')}`
-        //     })
-        //     .join('\n')
 
         const size = (1.3 * (2 * width)) / textMaxLength
         const multiText = layoutMultilineText(text, {
@@ -100,13 +87,13 @@ export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
         }
     }
 
-    pdfDoc.setTitle('Dossier PDF avec watermark')
-    pdfDoc.setAuthor('Byrds Consulting')
-    pdfDoc.setSubject('Dossier')
-    pdfDoc.setKeywords(['dossier', 'pdf', 'watermark'])
-    pdfDoc.setProducer('Dossier PDF')
-    pdfDoc.setCreator('Dossier PDF (https://dossierpdf.fr)')
-    pdfDoc.setCreationDate(new Date())
+    pdfDoc.setTitle(pdfDoc.getTitle() || 'Dossier PDF avec watermark')
+    pdfDoc.setAuthor(pdfDoc.getAuthor() || 'Byrds Consulting')
+    pdfDoc.setSubject(pdfDoc.getSubject() || 'Dossier')
+    pdfDoc.setKeywords([...(pdfDoc.getKeywords() ?? []), 'dossier', 'pdf', 'watermark'])
+    pdfDoc.setProducer('Dossier PDF (https://dossierpdf.fr)')
+    pdfDoc.setCreator(pdfDoc.getCreator() || 'Dossier PDF (https://dossierpdf.fr)')
+    pdfDoc.setCreationDate(pdfDoc.getCreationDate() || new Date())
     pdfDoc.setModificationDate(new Date())
 
     const pdfBytes = await pdfDoc.save()
