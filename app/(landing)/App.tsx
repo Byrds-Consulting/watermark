@@ -28,29 +28,32 @@ function pdfBufferToBase64(pdf: Uint8Array) {
 }
 
 async function processFileBuffer(
+    fileName: string,
     fileType: string,
     buffer: ArrayBuffer,
     watermarkText: string,
-): Promise<[ArrayBuffer[], Uint8Array[]]> {
-    const fileArray: ArrayBuffer[] = []
+): Promise<[string[], Uint8Array[]]> {
+    const fileNameArray: string[] = []
     const pdfArray: Uint8Array[] = []
     if (fileType === 'application/zip') {
         const blob = new Blob([new Uint8Array(buffer)], { type: fileType })
         const zipFileReader = new zip.BlobReader(blob)
         const zipReader = new zip.ZipReader(zipFileReader)
         for (const fileEntry of await zipReader.getEntries()) {
-            console.log('Zip file entry:', fileEntry?.filename)
+            if (!fileEntry) continue
+            console.log('Zip file entry:', fileEntry.filename)
             const uintArrayWriter = new zip.Uint8ArrayWriter()
-            const pdfFile = await fileEntry?.getData?.(uintArrayWriter)
+            const pdfFile = await fileEntry.getData?.(uintArrayWriter)
             if (pdfFile) {
                 const typeInfo = await fileTypeFromBuffer(pdfFile)
                 if (typeInfo) {
-                    const [buffers, pdfs] = await processFileBuffer(
+                    const [fileNames, pdfs] = await processFileBuffer(
+                        fileEntry.filename,
                         typeInfo.mime,
                         pdfFile,
                         watermarkText,
                     )
-                    fileArray.push(...buffers)
+                    fileNameArray.push(...fileNames)
                     pdfArray.push(...pdfs)
                 } else {
                     console.log(`Unknown file type for "${fileEntry.filename}"`)
@@ -60,58 +63,71 @@ async function processFileBuffer(
         await zipReader.close()
     } else if (fileType === 'application/pdf') {
         const pdf = await test_modifyPdf(buffer, watermarkText)
-        fileArray.push(buffer)
+        fileNameArray.push(fileName)
         pdfArray.push(pdf)
     } else {
+        // TODO: should transform and rename .png|jpg|etc to .pdf
         console.log(`Unknown file type "${fileType}"`)
     }
-    return [fileArray, pdfArray]
+    return [fileNameArray, pdfArray]
 }
 
 async function processAllFiles(
     files: File[],
     watermarkText: string,
-): Promise<[ArrayBuffer[], Uint8Array[]]> {
+): Promise<[string | null, string[], Uint8Array[]]> {
+    const fileNameArray: string[] = []
     const fileArray: ArrayBuffer[] = []
     const pdfArray: Uint8Array[] = []
     for (const file of files) {
         console.log(file)
         const reader = new FileReader()
         reader.readAsArrayBuffer(file)
-        const [buffers, pdfs] = await new Promise<[ArrayBuffer[], Uint8Array[]]>((resolve) => {
-            reader.onload = async (event) => {
-                const buffer = event.target?.result
-                if (buffer instanceof ArrayBuffer) {
-                    return resolve(processFileBuffer(file.type, buffer, watermarkText))
+        const [fileNames, pdfs] = await new Promise<Awaited<ReturnType<typeof processFileBuffer>>>(
+            (resolve) => {
+                reader.onload = async (event) => {
+                    const buffer = event.target?.result
+                    if (buffer instanceof ArrayBuffer) {
+                        return resolve(
+                            processFileBuffer(file.name, file.type, buffer, watermarkText),
+                        )
+                    }
+                    return resolve([[], []])
                 }
-                return resolve([[], []])
-            }
-        })
-        fileArray.push(...buffers)
+            },
+        )
+        fileNameArray.push(...fileNames)
         pdfArray.push(...pdfs)
     }
-    return [fileArray, pdfArray]
+    if (files.length > 0 && files[0].type === 'application/zip') {
+        return [files[0].name, fileNameArray, pdfArray]
+        // } else if (pdfArray.length > 1) {
+        //     return [`dossier_${intl.format(new Date())}.zip`, fileNameArray, pdfArray]
+    }
+    return [null, fileNameArray, pdfArray]
 }
 
 export const App = () => {
-    const [fileArray, setFileArray] = useState<ArrayBuffer[]>([])
-    const [pdfArray, setPDFArray] = useState<Uint8Array[]>([])
-    const [isReady, setReady] = useState<boolean>(false)
+    const [originalFileName, setOriginalFileName] = useState<string | null>(null)
+    const [pdfArray, setPDFArray] = useState<Array<[string, Uint8Array]>>([])
     const { register, handleSubmit, watch } = useForm()
+    const watermarkText = watch('watermark')
     const plausible = usePlausible()
 
-    const samplePDF = pdfArray[0]
-
-    const watermarkText = watch('watermark')
+    const isReady = !!pdfArray[0]
+    console.log('files:', pdfArray.map(([fileName]) => fileName).join('\n'))
 
     const onDrop = useCallback(
         async (acceptedFiles: File[]) => {
             plausible('File upload')
-            const [files, pdfs] = await processAllFiles(acceptedFiles, watermarkText)
-            if (files.length > 0 && pdfs.length > 0) {
-                setFileArray(files)
-                setPDFArray(pdfs)
-                setReady(true)
+            const [originalFileName, fileNames, pdfs] = await processAllFiles(
+                acceptedFiles,
+                watermarkText,
+            )
+            if (pdfs.length > 0) {
+                setOriginalFileName(originalFileName)
+                setPDFArray(fileNames.map((fileName, idx) => [fileName, pdfs[idx]]))
+                // setReady(true)
             }
         },
         [plausible, watermarkText],
@@ -121,7 +137,10 @@ export const App = () => {
         ;(async () => {
             setPDFArray(
                 await Promise.all(
-                    fileArray.map((buffer) => test_modifyPdf(buffer, watermarkText || 'Test')),
+                    pdfArray.map(async ([fileName, buffer]) => [
+                        fileName,
+                        await test_modifyPdf(buffer, watermarkText || 'Test'),
+                    ]),
                 ),
             )
         })()
@@ -130,25 +149,49 @@ export const App = () => {
 
     const downloadPDF = useCallback(async () => {
         plausible('File download')
-        const allPages = document.querySelectorAll<HTMLCanvasElement>('.react-pdf__Page__canvas')
-        if (allPages.length <= 0) return
 
         // PDF Creation
-        const pdfDoc = await PDFDocument.create()
-        for (const canvas of allPages) {
-            const base64 = canvas.toDataURL('image/jpeg', 0.3)
-            const page = pdfDoc.addPage()
-            const image = await pdfDoc.embedJpg(base64)
-            page.drawImage(image, {
-                x: 0,
-                y: 0, // 250
-                width: page.getWidth(),
-                height: page.getHeight(),
-            })
+        async function pdfFromCanvas(allPages: NodeListOf<HTMLCanvasElement>) {
+            const pdfDoc = await PDFDocument.create()
+            for (const canvas of allPages) {
+                const base64 = canvas.toDataURL('image/jpeg', 0.3)
+                const page = pdfDoc.addPage([canvas.width, canvas.height])
+                const image = await pdfDoc.embedJpg(base64)
+                page.drawImage(image, {
+                    x: 0,
+                    y: 0, // 250
+                    width: page.getWidth(),
+                    height: page.getHeight(),
+                })
+            }
+            return await pdfDoc.save()
         }
-        const pdfBytes = await pdfDoc.save()
-        test_downloadByteArray('pdflib-created.pdf', pdfBytes)
-    }, [plausible])
+
+        if (originalFileName || pdfArray.length > 1) {
+            const zipWriter = new zip.ZipWriter(new zip.BlobWriter('application/zip'))
+            for (const [idx, [fileName]] of pdfArray.entries()) {
+                const allPages = document.querySelectorAll<HTMLCanvasElement>(
+                    `.pdf_${idx} .react-pdf__Page__canvas`,
+                )
+                console.warn(`[${idx}] Download:`, fileName, allPages.length)
+                const pdfBytes = await pdfFromCanvas(allPages)
+                await zipWriter.add(fileName, new zip.Uint8ArrayReader(pdfBytes))
+            }
+            const zipFileBlob = await zipWriter.close()
+            test_downloadByteArray(
+                originalFileName || `dossier_${intl.format(new Date())}.zip`,
+                zipFileBlob,
+            )
+        } else if (pdfArray.length > 0) {
+            const [fileName] = pdfArray[0]
+            const allPages = document.querySelectorAll<HTMLCanvasElement>(
+                '.pdf_0 .react-pdf__Page__canvas',
+            )
+            console.warn(`[0] Download:`, fileName, allPages.length)
+            const pdfBytes = await pdfFromCanvas(allPages)
+            test_downloadByteArray(fileName, pdfBytes)
+        }
+    }, [originalFileName, pdfArray, plausible])
 
     return (
         <div className="flex w-full gap-8 h-screen">
@@ -240,14 +283,26 @@ export const App = () => {
             </div>
             <div className="basis-2/5 w-full overflow-y-auto overflow-x-hidden max-h-full">
                 <div className="mt-16 pr-8 w-[120%]">
-                    {samplePDF ? (
-                        <PDFViewer file={pdfBufferToBase64(samplePDF)} />
-                    ) : fileArray.length > 0 ? (
-                        <div className="opacity-10">
-                            <PDFViewer file={fileArray[0]} />
-                        </div>
+                    {pdfArray.length > 0 ? (
+                        pdfArray.map(([fileName, buffer], idx) =>
+                            idx === 0 ? (
+                                <PDFViewer
+                                    key={idx}
+                                    fileId={idx}
+                                    file={pdfBufferToBase64(buffer)}
+                                />
+                            ) : (
+                                <div key={idx} className="hidden">
+                                    <PDFViewer
+                                        key={idx}
+                                        fileId={idx}
+                                        file={pdfBufferToBase64(buffer)}
+                                    />
+                                </div>
+                            ),
+                        )
                     ) : (
-                        <PDFViewer />
+                        <PDFViewer fileId={0} />
                     )}
                 </div>
             </div>

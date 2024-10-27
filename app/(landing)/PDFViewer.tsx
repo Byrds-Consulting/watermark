@@ -12,8 +12,10 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 
 export default function PDFViewer({
     file,
+    fileId,
     pagesToDisplay,
 }: {
+    fileId: string | number
     file?: ArrayBuffer | string
     pagesToDisplay?: number
 }) {
@@ -32,6 +34,7 @@ export default function PDFViewer({
     return (
         <div className="PDFViewer w-full" ref={componentRef}>
             <Document
+                className={`pdf_${fileId}`}
                 file={
                     file ??
                     // 'https://raw.githubusercontent.com/wojtekmaj/react-pdf/5bcddeb2255712c4f261104f0d62d51005039e25/sample/next-app/public/sample.pdf' ??

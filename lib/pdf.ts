@@ -106,10 +106,10 @@ export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
 
 export function test_downloadByteArray(
     reportName: string,
-    byte: Uint8Array,
+    data: Uint8Array | Blob,
     mimeType = 'application/pdf',
 ) {
-    const blob = new Blob([byte], { type: mimeType })
+    const blob = data instanceof Blob ? data : new Blob([data], { type: mimeType })
     const link = document.createElement('a')
     link.href = window.URL.createObjectURL(blob)
     const fileName = reportName
