@@ -93,7 +93,12 @@ export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
     pdfDoc.setKeywords([...(pdfDoc.getKeywords() ?? []), 'dossier', 'pdf', 'watermark'])
     pdfDoc.setProducer('Dossier PDF (https://dossierpdf.fr)')
     pdfDoc.setCreator(pdfDoc.getCreator() || 'Dossier PDF (https://dossierpdf.fr)')
-    pdfDoc.setCreationDate(pdfDoc.getCreationDate() || new Date())
+    try {
+        pdfDoc.setCreationDate(pdfDoc.getCreationDate() || new Date())
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (error) {
+        pdfDoc.setCreationDate(new Date())
+    }
     pdfDoc.setModificationDate(new Date())
 
     const pdfBytes = await pdfDoc.save()
