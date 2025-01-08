@@ -14,6 +14,9 @@ importers:
       '@radix-ui/react-slot':
         specifier: ^1.1.0
         version: 1.1.0(@types/react@18.3.11)(react@19.0.0-rc-cae764ce-20241025)
+      '@sentry/browser':
+        specifier: ^8.48.0
+        version: 8.48.0
       '@sentry/nextjs':
         specifier: ^8
         version: 8.37.1(@opentelemetry/core@1.27.0(@opentelemetry/api@1.9.0))(@opentelemetry/instrumentation@0.54.1(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@1.27.0(@opentelemetry/api@1.9.0))(next@15.0.2-canary.8(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(react-dom@19.0.0-rc-cae764ce-20241025(react@19.0.0-rc-cae764ce-20241025))(react@19.0.0-rc-cae764ce-20241025))(react@19.0.0-rc-cae764ce-20241025)(webpack@5.96.1)
@@ -32,6 +35,9 @@ importers:
       file-type:
         specifier: ^19.6.0
         version: 19.6.0
+      jschardet:
+        specifier: ^3.1.4
+        version: 3.1.4
       lucide-react:
         specifier: ^0.447.0
         version: 0.447.0(react@19.0.0-rc-cae764ce-20241025)
@@ -676,16 +682,32 @@ packages:
     resolution: {integrity: sha512-OSR/V5GCsSCG7iapWtXCT/y22uo3HlawdEgfM1NIKk1mkP15UyGQtGEzZDdih2H+SNuX1mp9jQLTjr5FFp1A5w==}
     engines: {node: '>=14.18'}
 
+  '@sentry-internal/browser-utils@8.48.0':
+    resolution: {integrity: sha512-pLtu0Fa1Ou0v3M1OEO1MB1EONJVmXEGtoTwFRCO1RPQI2ulmkG6BikINClFG5IBpoYKZ33WkEXuM6U5xh+pdZg==}
+    engines: {node: '>=14.18'}
+
   '@sentry-internal/feedback@8.37.1':
     resolution: {integrity: sha512-Se25NXbSapgS2S+JssR5YZ48b3OY4UGmAuBOafgnMW91LXMxRNWRbehZuNUmjjHwuywABMxjgu+Yp5uJDATX+g==}
+    engines: {node: '>=14.18'}
+
+  '@sentry-internal/feedback@8.48.0':
+    resolution: {integrity: sha512-6PwcJNHVPg0EfZxmN+XxVOClfQpv7MBAweV8t9i5l7VFr8sM/7wPNSeU/cG7iK19Ug9ZEkBpzMOe3G4GXJ5bpw==}
     engines: {node: '>=14.18'}
 
   '@sentry-internal/replay-canvas@8.37.1':
     resolution: {integrity: sha512-1JLAaPtn1VL5vblB0BMELFV0D+KUm/iMGsrl4/JpRm0Ws5ESzQl33DhXVv1IX/ZAbx9i14EjR7MG9+Hj70tieQ==}
     engines: {node: '>=14.18'}
 
+  '@sentry-internal/replay-canvas@8.48.0':
+    resolution: {integrity: sha512-LdivLfBXXB9us1aAc6XaL7/L2Ob4vi3C/fEOXElehg3qHjX6q6pewiv5wBvVXGX1NfZTRvu+X11k6TZoxKsezw==}
+    engines: {node: '>=14.18'}
+
   '@sentry-internal/replay@8.37.1':
     resolution: {integrity: sha512-E/Plhisk/pXJjOdOU12sg8m/APTXTA21iEniidP6jW3/+O0tD/H/UovEqa4odNTqxPMa798xHQSQNt5loYiaLA==}
+    engines: {node: '>=14.18'}
+
+  '@sentry-internal/replay@8.48.0':
+    resolution: {integrity: sha512-csILVupc5RkrsTrncuUTGmlB56FQSFjXPYWG8I8yBTGlXEJ+o8oTuF6+55R4vbw3EIzBveXWi4kEBbnQlXW/eg==}
     engines: {node: '>=14.18'}
 
   '@sentry/babel-plugin-component-annotate@2.22.6':
@@ -694,6 +716,10 @@ packages:
 
   '@sentry/browser@8.37.1':
     resolution: {integrity: sha512-5ym+iGiIpjIKKpMWi9S3/tXh9xneS+jqxwRTJqed3cb8i4ydfMAAP8sM3U8xMCWWABpWyIUW+fpewC0tkhE1aQ==}
+    engines: {node: '>=14.18'}
+
+  '@sentry/browser@8.48.0':
+    resolution: {integrity: sha512-fuuVULB5/1vI8NoIwXwR3xwhJJqk+y4RdSdajExGF7nnUDBpwUJyXsmYJnOkBO+oLeEs58xaCpotCKiPUNnE3g==}
     engines: {node: '>=14.18'}
 
   '@sentry/bundler-plugin-core@2.22.6':
@@ -748,6 +774,10 @@ packages:
 
   '@sentry/core@8.37.1':
     resolution: {integrity: sha512-82csXby589iDupM3VgCHJeWZagUyEEaDnbFcoZ/Z91QX2Sjq8FcF5OsforoXjw09i0XTFqlkFAnQVpDBmMXcpQ==}
+    engines: {node: '>=14.18'}
+
+  '@sentry/core@8.48.0':
+    resolution: {integrity: sha512-VGwYgTfLpvJ5LRO5A+qWo1gpo6SfqaGXL9TOzVgBucAdpzbrYHpZ87sEarDVq/4275uk1b0S293/mfsskFczyw==}
     engines: {node: '>=14.18'}
 
   '@sentry/nextjs@8.37.1':
@@ -1843,6 +1873,10 @@ packages:
   js-yaml@4.1.0:
     resolution: {integrity: sha512-wpxZs9NoxZaJESJGIZTyDEaYpl0FKSA+FB9aJiyemKhMwkxQg63h4T1KJgUGHpTqPDNRcmmYLugrRjJlBtWvRA==}
     hasBin: true
+
+  jschardet@3.1.4:
+    resolution: {integrity: sha512-/kmVISmrwVwtyYU40iQUOp3SUPk2dhNCMsZBQX0R1/jZ8maaXJ/oZIzUOiyOqcgtLnETFKYChbJ5iDC/eWmFHg==}
+    engines: {node: '>=0.1.90'}
 
   jsesc@3.0.2:
     resolution: {integrity: sha512-xKqzzWXDttJuOcawBt4KnKHHIf5oQ/Cxax+0PWFG+DFDgHNAdi+TXECADI+RYiFUMmx8792xsMbbgXj4CwnP4g==}
@@ -3458,11 +3492,19 @@ snapshots:
       '@sentry/types': 8.37.1
       '@sentry/utils': 8.37.1
 
+  '@sentry-internal/browser-utils@8.48.0':
+    dependencies:
+      '@sentry/core': 8.48.0
+
   '@sentry-internal/feedback@8.37.1':
     dependencies:
       '@sentry/core': 8.37.1
       '@sentry/types': 8.37.1
       '@sentry/utils': 8.37.1
+
+  '@sentry-internal/feedback@8.48.0':
+    dependencies:
+      '@sentry/core': 8.48.0
 
   '@sentry-internal/replay-canvas@8.37.1':
     dependencies:
@@ -3471,12 +3513,22 @@ snapshots:
       '@sentry/types': 8.37.1
       '@sentry/utils': 8.37.1
 
+  '@sentry-internal/replay-canvas@8.48.0':
+    dependencies:
+      '@sentry-internal/replay': 8.48.0
+      '@sentry/core': 8.48.0
+
   '@sentry-internal/replay@8.37.1':
     dependencies:
       '@sentry-internal/browser-utils': 8.37.1
       '@sentry/core': 8.37.1
       '@sentry/types': 8.37.1
       '@sentry/utils': 8.37.1
+
+  '@sentry-internal/replay@8.48.0':
+    dependencies:
+      '@sentry-internal/browser-utils': 8.48.0
+      '@sentry/core': 8.48.0
 
   '@sentry/babel-plugin-component-annotate@2.22.6': {}
 
@@ -3489,6 +3541,14 @@ snapshots:
       '@sentry/core': 8.37.1
       '@sentry/types': 8.37.1
       '@sentry/utils': 8.37.1
+
+  '@sentry/browser@8.48.0':
+    dependencies:
+      '@sentry-internal/browser-utils': 8.48.0
+      '@sentry-internal/feedback': 8.48.0
+      '@sentry-internal/replay': 8.48.0
+      '@sentry-internal/replay-canvas': 8.48.0
+      '@sentry/core': 8.48.0
 
   '@sentry/bundler-plugin-core@2.22.6':
     dependencies:
@@ -3548,6 +3608,8 @@ snapshots:
     dependencies:
       '@sentry/types': 8.37.1
       '@sentry/utils': 8.37.1
+
+  '@sentry/core@8.48.0': {}
 
   '@sentry/nextjs@8.37.1(@opentelemetry/core@1.27.0(@opentelemetry/api@1.9.0))(@opentelemetry/instrumentation@0.54.1(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@1.27.0(@opentelemetry/api@1.9.0))(next@15.0.2-canary.8(@babel/core@7.26.0)(@opentelemetry/api@1.9.0)(react-dom@19.0.0-rc-cae764ce-20241025(react@19.0.0-rc-cae764ce-20241025))(react@19.0.0-rc-cae764ce-20241025))(react@19.0.0-rc-cae764ce-20241025)(webpack@5.96.1)':
     dependencies:
@@ -4980,6 +5042,8 @@ snapshots:
   js-yaml@4.1.0:
     dependencies:
       argparse: 2.0.1
+
+  jschardet@3.1.4: {}
 
   jsesc@3.0.2: {}
 

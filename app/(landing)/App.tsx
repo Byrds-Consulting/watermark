@@ -2,6 +2,8 @@
 
 import * as zip from '@zip.js/zip.js'
 import { fileTypeFromBuffer } from 'file-type'
+import jschardet from 'jschardet'
+import { captureException } from '@sentry/browser'
 
 import Image from 'next/image'
 import { useForm } from 'react-hook-form'
@@ -36,6 +38,7 @@ async function processFileBuffer(
 ): Promise<[string[], Uint8Array[]]> {
     const fileNameArray: string[] = []
     const pdfArray: Uint8Array[] = []
+    console.log('Processing file:', fileName)
     if (fileType === 'application/zip') {
         const blob = new Blob([new Uint8Array(buffer)], { type: fileType })
         const zipFileReader = new zip.BlobReader(blob)
@@ -47,8 +50,11 @@ async function processFileBuffer(
             if (pdfFile) {
                 const typeInfo = await fileTypeFromBuffer(pdfFile)
                 if (typeInfo) {
+                    const detectedEncoding = jschardet.detect(Buffer.from(fileEntry.rawFilename))
+                    const decoder = new TextDecoder(detectedEncoding.encoding ?? 'utf-8')
+                    const decodedFilename = decoder.decode(fileEntry.rawFilename)
                     const [fileNames, pdfs] = await processFileBuffer(
-                        fileEntry.filename,
+                        decodedFilename,
                         typeInfo.mime,
                         pdfFile,
                         watermarkText,
@@ -131,14 +137,20 @@ export const App = () => {
     const onDrop = useCallback(
         async (acceptedFiles: File[]) => {
             plausible('File upload')
-            const [originalFileName, fileNames, pdfs] = await processAllFiles(
-                acceptedFiles,
-                watermarkText,
-            )
-            if (pdfs.length > 0) {
-                setOriginalFileName(originalFileName)
-                setPDFArray(fileNames.map((fileName, idx) => [fileName, pdfs[idx]]))
-                // setReady(true)
+            try {
+                const [originalFileName, fileNames, pdfs] = await processAllFiles(
+                    acceptedFiles,
+                    watermarkText,
+                )
+                if (pdfs.length > 0) {
+                    setOriginalFileName(originalFileName)
+                    setPDFArray(fileNames.map((fileName, idx) => [fileName, pdfs[idx]]))
+                    // setReady(true)
+                }
+            } catch (error) {
+                console.error('Error processing files:', error)
+                captureException(error)
+                plausible('File upload error')
             }
         },
         [plausible, watermarkText],

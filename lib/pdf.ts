@@ -36,7 +36,7 @@ export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
         const { width, height } = page.getSize()
         const textMaxLength = text.split('\n').reduce((res, str) => Math.max(res, str.length), 0)
 
-        const size = (1.3 * (2 * width)) / textMaxLength
+        const size = (1.1 * (2 * width)) / textMaxLength
         const multiText = layoutMultilineText(text, {
             alignment: TextAlignment.Center,
             font: helveticaFont,
@@ -62,7 +62,11 @@ export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
             wordBreaks: [' '],
             rotate: degrees(-45),
         }
-        const lines = Math.max(4, Math.ceil((4 * page.getHeight()) / page.getWidth())) // 6
+        const optimalLines = 5
+        const lines = Math.max(
+            optimalLines,
+            Math.ceil((optimalLines * page.getHeight()) / page.getWidth()),
+        )
         for (const n of Array(lines).keys()) {
             for (let i = 0; i < multiText.lines.length; i++) {
                 const xOffset = Math.abs(maxMultilineWidth - multiText.lines[i].width) / 2
