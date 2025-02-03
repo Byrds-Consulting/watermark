@@ -181,7 +181,7 @@ export const App = () => {
             console.warn(`[${idx}] PDF render:`, fileName, `(${allPages.length} pages`)
             const pdfDoc = await PDFDocument.create()
             for (const canvas of allPages) {
-                const base64 = canvas.toDataURL('image/jpeg', 0.3)
+                const base64 = canvas.toDataURL('image/jpeg', 0.25)
                 const page = pdfDoc.addPage([canvas.width, canvas.height])
                 const image = await pdfDoc.embedJpg(base64)
                 page.drawImage(image, {
