@@ -13,6 +13,7 @@
         "@radix-ui/react-slot": "^1.1.0",
         "@sentry/browser": "^8.48.0",
         "@sentry/nextjs": "^8",
+        "@ungap/with-resolvers": "^0.1.0",
         "@zip.js/zip.js": "^2.7.52",
         "class-variance-authority": "^0.7.0",
         "clsx": "^2.1.1",

@@ -1,5 +1,7 @@
 'use client'
 
+import '@ungap/with-resolvers'
+
 import * as zip from '@zip.js/zip.js'
 import { fileTypeFromBuffer } from 'file-type'
 import jschardet from 'jschardet'
