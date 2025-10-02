@@ -19,6 +19,7 @@ import dynamic from 'next/dynamic'
 import { ArrowDownCircleIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { DocumentTextIcon } from '@heroicons/react/24/outline'
+import { useDebounce } from '@uidotdev/usehooks'
 
 const intl = new Intl.DateTimeFormat('fr-FR')
 
@@ -70,9 +71,8 @@ async function processFileBuffer(
         }
         await zipReader.close()
     } else if (fileType === 'application/pdf') {
-        const pdf = await test_modifyPdf(buffer, watermarkText)
         fileNameArray.push(fileName)
-        pdfArray.push(pdf)
+        pdfArray.push(new Uint8Array(buffer))
     } else if (fileType === 'image/jpeg' || fileType === 'image/png') {
         const pdfDoc = await PDFDocument.create()
         const image =
@@ -87,9 +87,8 @@ async function processFileBuffer(
             height: imgDims.height,
         })
         const pdfBytes = await pdfDoc.save()
-        const pdf = await test_modifyPdf(pdfBytes, watermarkText)
         fileNameArray.push(fileName.replace(/\.(jpg|jpeg|png)$/i, '.pdf'))
-        pdfArray.push(pdf)
+        pdfArray.push(pdfBytes)
     } else {
         console.log(`Ignoring: Unknown file type for "${fileName}" (${fileType})`)
     }
@@ -129,9 +128,11 @@ async function processAllFiles(
 
 export const App = () => {
     const [originalFileName, setOriginalFileName] = useState<string | null>(null)
+    const [pdfOriginalArray, setPDFOriginalArray] = useState<Array<[string, Uint8Array]>>([])
     const [pdfArray, setPDFArray] = useState<Array<[string, Uint8Array]>>([])
     const { register, handleSubmit, watch } = useForm()
-    const watermarkText = watch('watermark')
+    const watermarkTextValue = watch('watermark')
+    const watermarkText = useDebounce(watermarkTextValue, 200)
     const plausible = usePlausible()
 
     const isReady = pdfArray.length > 0
@@ -146,7 +147,7 @@ export const App = () => {
                 )
                 if (pdfs.length > 0) {
                     setOriginalFileName(originalFileName)
-                    setPDFArray(fileNames.map((fileName, idx) => [fileName, pdfs[idx]]))
+                    setPDFOriginalArray(fileNames.map((fileName, idx) => [fileName, pdfs[idx]]))
                     // setReady(true)
                 }
             } catch (error) {
@@ -162,15 +163,15 @@ export const App = () => {
         ;(async () => {
             setPDFArray(
                 await Promise.all(
-                    pdfArray.map(async ([fileName, buffer]) => [
+                    pdfOriginalArray.map(async ([fileName, buffer]) => [
                         fileName,
-                        await test_modifyPdf(buffer, watermarkText || 'Test'),
+                        await test_modifyPdf(buffer, watermarkText || ''),
                     ]),
                 ),
             )
         })()
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [watermarkText])
+    }, [pdfOriginalArray, watermarkText])
 
     const downloadPDF = useCallback(async () => {
         plausible('File download')

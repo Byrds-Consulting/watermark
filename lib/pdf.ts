@@ -28,7 +28,7 @@ export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
     //   const url = 'https://pdf-lib.js.org/assets/with_update_sections.pdf'
     //   const existingPdfBytes = await fetch(url).then(res => res.arrayBuffer())
 
-    const pdfDoc = await loadPDF(existingPdfBytes)
+    const pdfDoc = await loadPDF(new Uint8Array(existingPdfBytes).buffer)
     const helveticaFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
 
     const pages = pdfDoc.getPages()
