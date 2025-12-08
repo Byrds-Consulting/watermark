@@ -37,7 +37,6 @@ async function processFileBuffer(
     fileName: string,
     fileType: string,
     buffer: ArrayBuffer,
-    watermarkText: string,
 ): Promise<[string[], Uint8Array[]]> {
     const fileNameArray: string[] = []
     const pdfArray: Uint8Array[] = []
@@ -59,8 +58,7 @@ async function processFileBuffer(
                     const [fileNames, pdfs] = await processFileBuffer(
                         decodedFilename,
                         typeInfo.mime,
-                        pdfFile,
-                        watermarkText,
+                        pdfFile.buffer as ArrayBuffer,
                     )
                     fileNameArray.push(...fileNames)
                     pdfArray.push(...pdfs)
@@ -109,9 +107,7 @@ async function processAllFiles(
                 reader.onload = async (event) => {
                     const buffer = event.target?.result
                     if (buffer instanceof ArrayBuffer) {
-                        return resolve(
-                            processFileBuffer(file.name, file.type, buffer, watermarkText),
-                        )
+                        return resolve(processFileBuffer(file.name, file.type, buffer))
                     }
                     return resolve([[], []])
                 }
@@ -128,11 +124,11 @@ async function processAllFiles(
 
 export const App = () => {
     const [originalFileName, setOriginalFileName] = useState<string | null>(null)
-    const [pdfOriginalArray, setPDFOriginalArray] = useState<Array<[string, Uint8Array]>>([])
+    const [OriginalPDFArray, setOriginalPDFArray] = useState<Array<[string, Uint8Array]>>([])
     const [pdfArray, setPDFArray] = useState<Array<[string, Uint8Array]>>([])
     const { register, handleSubmit, watch } = useForm()
     const watermarkTextValue = watch('watermark')
-    const watermarkText = useDebounce(watermarkTextValue, 200)
+    const watermarkText = useDebounce<string>(watermarkTextValue, 200)
     const plausible = usePlausible()
 
     const isReady = pdfArray.length > 0
@@ -147,7 +143,7 @@ export const App = () => {
                 )
                 if (pdfs.length > 0) {
                     setOriginalFileName(originalFileName)
-                    setPDFOriginalArray(fileNames.map((fileName, idx) => [fileName, pdfs[idx]]))
+                    setOriginalPDFArray(fileNames.map((fileName, idx) => [fileName, pdfs[idx]]))
                     // setReady(true)
                 }
             } catch (error) {
@@ -163,15 +159,15 @@ export const App = () => {
         ;(async () => {
             setPDFArray(
                 await Promise.all(
-                    pdfOriginalArray.map(async ([fileName, buffer]) => [
+                    OriginalPDFArray.map(async ([fileName, buffer]) => [
                         fileName,
-                        await test_modifyPdf(buffer, watermarkText || ''),
+                        await test_modifyPdf(buffer.buffer as ArrayBuffer, watermarkText || ''),
                     ]),
                 ),
             )
         })()
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pdfOriginalArray, watermarkText])
+    }, [OriginalPDFArray, watermarkText])
 
     const downloadPDF = useCallback(async () => {
         plausible('File download')
