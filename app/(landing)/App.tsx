@@ -46,7 +46,7 @@ async function processFileBuffer(
         const zipFileReader = new zip.BlobReader(blob)
         const zipReader = new zip.ZipReader(zipFileReader)
         for (const fileEntry of await zipReader.getEntries()) {
-            if (!fileEntry) continue
+            if (!fileEntry || fileEntry.directory) continue
             const uintArrayWriter = new zip.Uint8ArrayWriter()
             const pdfFile = await fileEntry.getData?.(uintArrayWriter)
             if (pdfFile) {
@@ -207,7 +207,7 @@ export const App = () => {
         } else if (pdfArray.length > 0) {
             const [fileName] = pdfArray[0]
             const pdfBytes = await pdfFromCanvas(fileName, 0)
-            test_downloadByteArray(fileName, pdfBytes)
+            test_downloadByteArray(fileName, pdfBytes as BlobPart)
         }
     }, [originalFileName, pdfArray, plausible])
 

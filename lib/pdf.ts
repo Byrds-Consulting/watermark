@@ -111,7 +111,7 @@ export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
 
 export function test_downloadByteArray(
     reportName: string,
-    data: Uint8Array | Blob,
+    data: BlobPart | Blob,
     mimeType = 'application/pdf',
 ) {
     const blob = data instanceof Blob ? data : new Blob([data], { type: mimeType })
