@@ -3,6 +3,8 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
     output: 'standalone',
+    // next 15.x lints during `next build` (the 15.6 canary did not); keep the previous behaviour.
+    eslint: { ignoreDuringBuilds: true },
     webpack: (config) => {
         config.resolve.alias.canvas = false
         return config
