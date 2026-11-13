@@ -14,3 +14,12 @@ overrides:
     rollup@<3.30.0: ^3.30.0
     sharp@<0.35.5: ^0.35.5
     source-map-js@<1.2.2: ^1.2.2
+
+# pnpm >= 11 fails the install on unreviewed build scripts (ERR_PNPM_IGNORED_BUILDS).
+# None of these are needed: canvas is aliased out in next.config.ts (and has no
+# toolchain in the alpine image), the Sentry CLI binary is only for source-map
+# upload, and unrs-resolver is an eslint dev dependency with prebuilt bindings.
+allowBuilds:
+    '@sentry/cli': false
+    canvas: false
+    unrs-resolver: false

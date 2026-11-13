@@ -11,7 +11,7 @@ COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* pnpm-workspace.y
 RUN \
     if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
     elif [ -f package-lock.json ]; then npm ci; \
-    elif [ -f pnpm-lock.yaml ]; then npm i -g pnpm && pnpm i --frozen-lockfile; \
+    elif [ -f pnpm-lock.yaml ]; then npm i -g pnpm@12.18.0 && pnpm i --frozen-lockfile; \
     else echo "Lockfile not found." && exit 1; \
     fi
 
@@ -30,7 +30,7 @@ COPY . .
 RUN \
     if [ -f yarn.lock ]; then yarn run build; \
     elif [ -f package-lock.json ]; then npm run build; \
-    elif [ -f pnpm-lock.yaml ]; then npm i -g pnpm && pnpm run build; \
+    elif [ -f pnpm-lock.yaml ]; then npm i -g pnpm@12.18.0 && pnpm run build; \
     else echo "Lockfile not found." && exit 1; \
     fi
 
