@@ -25,6 +25,15 @@ const pdfjsOptions = {
 
 export type PageSize = { width: number; height: number }
 
+/**
+ * The pdf.js worker could not be downloaded or started. pdf.js caches this failure for the rest of
+ * the page's life, so only reloading the page can recover.
+ */
+export class PdfWorkerStartError extends Error {
+    // Checked by name: the UI cannot import this browser-only module statically.
+    override name = 'PdfWorkerStartError'
+}
+
 export function loadPdf(
     source: Uint8Array | string,
     {
@@ -82,7 +91,7 @@ export async function isReadablePdf(bytes: Uint8Array) {
         await worker.promise
     } catch (error) {
         worker.destroy()
-        throw error
+        throw new PdfWorkerStartError('pdf.js worker failed to start', { cause: error })
     }
     // No fonts registered in the page: validation does not render anything.
     const task = loadPdf(bytes, { enableXfa: true, disableFontFace: true, worker })

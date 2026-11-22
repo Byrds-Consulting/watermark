@@ -37,6 +37,8 @@ function formatList(names: string[]) {
 export const App = () => {
     const [dossier, setDossier] = useState<Dossier | null>(null)
     const [uploadError, setUploadError] = useState<string | null>(null)
+    // pdf.js could not start (e.g. network glitch): only a page reload recovers.
+    const [needsReload, setNeedsReload] = useState(false)
     const [downloadError, setDownloadError] = useState<ForDossier<string> | null>(null)
     // Files whose export failed, excluded from the next download attempts of the same dossier.
     const [excluded, setExcluded] = useState<ForDossier<string[]> | null>(null)
@@ -80,6 +82,7 @@ export const App = () => {
                 const { files, rejected, archives } = await processFiles(acceptedFiles)
                 // Keep only the PDFs that pdf.js (the preview and export renderer) can open.
                 const { isReadablePdf } = await import('@/lib/render')
+                setNeedsReload(false)
                 const readable: SourceFile[] = []
                 const unreadable: string[] = []
                 for (const file of files) {
@@ -105,6 +108,11 @@ export const App = () => {
             } catch (error) {
                 if (id !== uploadId.current) return
                 setDossier(null)
+                if (error instanceof Error && error.name === 'PdfWorkerStartError') {
+                    setNeedsReload(true)
+                    setUploadError('Le lecteur PDF n’a pas pu être chargé (connexion interrompue ?).')
+                    return
+                }
                 setUploadError(
                     isLimitError(error)
                         ? `${error.message} : importez moins de fichiers à la fois.`
@@ -267,6 +275,11 @@ export const App = () => {
                                     <p>Caractères non pris en charge dans le filigrane : {unsupportedChars.join(' ')}</p>
                                 ) : null}
                                 {uploadError ? <p>{uploadError}</p> : null}
+                                {needsReload ? (
+                                    <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+                                        Recharger la page
+                                    </Button>
+                                ) : null}
                                 {excludedNames.length > 0 ? (
                                     <p>Fichiers retirés du dossier (conversion impossible) : {formatList(excludedNames)}</p>
                                 ) : null}
