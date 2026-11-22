@@ -19,9 +19,9 @@ export default function PDFViewer({ file, watermarkText }: { file?: Uint8Array; 
     const [failedSource, setFailedSource] = useState<Uint8Array | string | null>(null)
     const source = file ?? SAMPLE_URL
     const error = failedSource === source
-    // The source whose first page is on screen: anything else means the preview is loading.
-    const [renderedSource, setRenderedSource] = useState<Uint8Array | string | null>(null)
-    const loading = renderedSource !== source && !error
+    // The loaded document whose first page is on screen (one object per load, so that reloading the
+    // same source, e.g. the sample, shows the loading state again).
+    const [renderedDoc, setRenderedDoc] = useState<object | null>(null)
 
     useLayoutEffect(() => {
         const container = containerRef.current
@@ -84,7 +84,7 @@ export default function PDFViewer({ file, watermarkText }: { file?: Uint8Array; 
                 const previous = container.children[pageNumber - 1]
                 if (previous) container.replaceChild(canvas, previous)
                 else container.appendChild(canvas)
-                if (pageNumber === 1) setRenderedSource(source)
+                if (pageNumber === 1) setRenderedDoc(doc)
             }
             while (container.children.length > doc.pdf.numPages) container.lastChild!.remove()
         })().catch(() => {
@@ -97,6 +97,8 @@ export default function PDFViewer({ file, watermarkText }: { file?: Uint8Array; 
             overlayTask?.destroy()
         }
     }, [doc, file, source, watermarkText, width])
+
+    const loading = !error && (doc === null || renderedDoc !== doc)
 
     return (
         <div className="PDFViewer w-full select-none pointer-events-none">

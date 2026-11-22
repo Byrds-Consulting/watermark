@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePlausible } from 'next-plausible'
 
 import { FileDropzone } from '@/app/(landing)/FileDropzone'
-import { downloadBlob, getUnsupportedWatermarkChars } from '@/lib/pdf'
+import { downloadBlob, getUnsupportedWatermarkChars, MAX_WATERMARK_LINES } from '@/lib/pdf'
 import { isLimitError, processFiles, uniqueNames, type SourceFile } from '@/lib/files'
 import dynamic from 'next/dynamic'
 import { ArrowDownCircleIcon } from '@heroicons/react/24/outline'
@@ -57,7 +57,11 @@ export const App = () => {
         () => (dossier ? dossier.files.filter((file) => !excludedNames.includes(file.name)) : []),
         [dossier, excludedNames],
     )
-    const hasWatermark = watermarkText.trim().length > 0 && unsupportedChars.length === 0
+    const watermarkLineCount = watermarkText.trim().split(/\r\n?|\n/).length
+    const hasWatermark =
+        watermarkText.trim().length > 0 &&
+        unsupportedChars.length === 0 &&
+        watermarkLineCount <= MAX_WATERMARK_LINES
     const isReady =
         exportableFiles.length > 0 &&
         hasWatermark &&
@@ -256,6 +260,9 @@ export const App = () => {
                             ></textarea>
                             <div className="space-y-2 text-center text-sm text-red-700" role="alert">
                                 {watermarkText.trim().length === 0 ? <p>Saisissez le texte du filigrane.</p> : null}
+                                {watermarkLineCount > MAX_WATERMARK_LINES ? (
+                                    <p>Le filigrane est limité à {MAX_WATERMARK_LINES} lignes.</p>
+                                ) : null}
                                 {unsupportedChars.length > 0 ? (
                                     <p>Caractères non pris en charge dans le filigrane : {unsupportedChars.join(' ')}</p>
                                 ) : null}

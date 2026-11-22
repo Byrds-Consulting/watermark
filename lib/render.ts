@@ -53,7 +53,10 @@ export async function isReadablePdf(bytes: Uint8Array) {
     const task = loadPdf(bytes)
     try {
         const doc = await task.promise
-        return doc.numPages > 0 && !doc.isPureXfa
+        // `isPureXfa` is only computed with XFA rendering enabled: read the form flags instead.
+        const { info } = (await doc.getMetadata()) as { info: { IsXFAPresent?: boolean; IsAcroFormPresent?: boolean } }
+        const isPureXfa = !!info.IsXFAPresent && !info.IsAcroFormPresent
+        return doc.numPages > 0 && !isPureXfa
     } catch {
         return false
     } finally {

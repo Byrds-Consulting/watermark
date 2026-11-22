@@ -1,5 +1,8 @@
 import { degrees, PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 
+/** Longest watermark accepted, in lines (the UI explains it, the overlay truncates defensively). */
+export const MAX_WATERMARK_LINES = 10
+
 const cos45 = 0.70710678119
 const sin45 = 0.70710678119
 
@@ -41,14 +44,20 @@ export async function createWatermarkOverlay(
         .split('\n')
         .map((line) => line.trim())
     while (lines.length > 1 && !lines[0]) lines.shift()
+    // Defensive bound, the UI refuses longer texts (see MAX_WATERMARK_LINES).
+    lines.splice(MAX_WATERMARK_LINES)
     while (lines.length > 1 && !lines[lines.length - 1]) lines.pop()
 
     const pdfDoc = await PDFDocument.create()
     const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
     // Short texts are drawn as if they had 10 characters, so they do not become huge.
     const maxChars = Math.max(10, ...lines.map((line) => line.length))
-    // Width of the longest line at font size 1, measured with the actual glyphs.
-    const maxWidth1 = Math.max(0.01, ...lines.map((line) => font.widthOfTextAtSize(line, 1)))
+    // Width of a line at font size 1 as drawn: drawText emits plain glyph advances, without the
+    // kerning that widthOfTextAtSize() applies to whole strings.
+    const advance1 = (line: string) =>
+        Array.from(line).reduce((sum, char) => sum + font.widthOfTextAtSize(char, 1), 0)
+    const lineWidths1 = lines.map(advance1)
+    const maxWidth1 = Math.max(0.01, ...lineWidths1)
 
     // Along the text (45° down-right) and perpendicular to it (the text's "up").
     const along = { x: cos45, y: -sin45 }
@@ -72,13 +81,17 @@ export async function createWatermarkOverlay(
         const halfDiagonal = Math.hypot(width, height) / 2
         const rows = Math.ceil(halfDiagonal / rowSpacing) + 1
         const columns = Math.ceil(halfDiagonal / columnSpacing) + 1
+        // A copy whose bounding circle does not reach the page is not drawn.
+        const blockRadius = Math.hypot(maxWidth1 * size, blockHeight) / 2
         for (let k = -rows; k <= rows; k++) {
             for (let j = -columns; j <= columns; j++) {
                 const shift = (j + (Math.abs(k) % 2) / 2) * columnSpacing
                 const centerX = width / 2 + k * rowSpacing * up.x + shift * along.x
                 const centerY = height / 2 + k * rowSpacing * up.y + shift * along.y
+                if (Math.hypot(centerX - width / 2, centerY - height / 2) > halfDiagonal + blockRadius) continue
                 lines.forEach((line, i) => {
-                    const lineWidth = font.widthOfTextAtSize(line, size)
+                    if (!line) return // blank lines only take room
+                    const lineWidth = lineWidths1[i] * size
                     // Baseline of line i, from the top of the block (descent ignored, ~0.2 em).
                     const offsetUp = blockHeight / 2 - (i + 1) * size + 0.2 * size
                     page.drawText(line, {
