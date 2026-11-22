@@ -54,6 +54,7 @@ export function FileDropzone({ onFile }: { onFile: (files: File[]) => void }) {
                 <input
                     type="file"
                     id="fileInput"
+                    multiple
                     // Visually hidden but focusable, so keyboard users can open the picker.
                     className="sr-only peer"
                     onChange={handleFileInput}
@@ -66,7 +67,7 @@ export function FileDropzone({ onFile }: { onFile: (files: File[]) => void }) {
                     className="block cursor-pointer rounded-md peer-focus-visible:ring-2 peer-focus-visible:ring-ring"
                 >
                     <DocumentArrowUpIcon className="mx-auto mb-4 h-8 w-8" />
-                    <p className="mt-2 text-sm">Sélectionnez un fichier</p>
+                    <p className="mt-2 text-sm">Sélectionnez vos fichiers</p>
                 </label>
 
                 <p className="text-xs text-center opacity-50 py-4">

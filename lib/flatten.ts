@@ -1,5 +1,6 @@
 import { PDFDocument } from 'pdf-lib'
-import { pdfjs, pdfjsOptions } from '@/lib/pdfjs'
+import { createWatermarkOverlay } from '@/lib/pdf'
+import { getPageSizes, loadPdf, renderPage } from '@/lib/render'
 
 // 144 DPI, independent of the preview size and of the device pixel ratio.
 const EXPORT_SCALE = 2
@@ -19,44 +20,36 @@ function canvasToJpeg(canvas: HTMLCanvasElement) {
 }
 
 /**
- * Rasterizes every page of a PDF, annotations and form fields included, into an image-only PDF. Each
- * page keeps its displayed size (in PDF points, rotation applied). The watermark is drawn on the
- * result afterwards, so nothing in the source document can cover it and it cannot be removed.
+ * Renders every page of a PDF (annotations and form fields included, as displayed) with the
+ * watermark drawn into the same pixels, and packs the images into a new PDF. Nothing in the source
+ * can cover the watermark, and it cannot be removed from the result. Each page keeps its displayed
+ * size in PDF points.
  */
-export async function flattenPdf(bytes: Uint8Array): Promise<Uint8Array> {
-    // pdf.js transfers the buffer to its worker: give it a copy.
-    const loadingTask = pdfjs.getDocument({
-        ...pdfjsOptions,
-        data: bytes.slice(),
-        // Fail instead of silently dropping content that cannot be decoded (e.g. a broken scan image).
-        stopAtErrors: true,
-    })
+export async function flattenPdf(bytes: Uint8Array, watermarkText: string): Promise<Uint8Array> {
+    const sourceTask = loadPdf(bytes)
+    let overlayTask: ReturnType<typeof loadPdf> | undefined
     try {
-        const source = await loadingTask.promise
+        const source = await sourceTask.promise
         if (source.numPages === 0) throw new Error('PDF without pages')
+        const sizes = await getPageSizes(source)
+        overlayTask = loadPdf(await createWatermarkOverlay(sizes, watermarkText))
+        const overlay = await overlayTask.promise
         const output = await PDFDocument.create()
+        output.setProducer('Dossier PDF (https://dossierpdf.fr)')
+        output.setCreator('Dossier PDF (https://dossierpdf.fr)')
         for (let pageNumber = 1; pageNumber <= source.numPages; pageNumber++) {
             const page = await source.getPage(pageNumber)
-            const pageSize = page.getViewport({ scale: 1 })
+            const { width, height } = sizes[pageNumber - 1]
             const scale = Math.min(
                 EXPORT_SCALE,
-                Math.sqrt(MAX_CANVAS_PIXELS / (pageSize.width * pageSize.height)),
-                MAX_CANVAS_SIDE / pageSize.width,
-                MAX_CANVAS_SIDE / pageSize.height,
+                Math.sqrt(MAX_CANVAS_PIXELS / (width * height)),
+                MAX_CANVAS_SIDE / width,
+                MAX_CANVAS_SIDE / height,
             )
-            const viewport = page.getViewport({ scale })
-            const canvas = document.createElement('canvas')
-            canvas.width = Math.max(1, Math.round(viewport.width))
-            canvas.height = Math.max(1, Math.round(viewport.height))
+            const canvas = await renderPage(page, await overlay.getPage(pageNumber), scale, { strict: true })
             try {
-                // Stretch the rendering to the integer canvas size, so no edge is cut or left blank.
-                const transform = [canvas.width / viewport.width, 0, 0, canvas.height / viewport.height, 0, 0]
-                await page.render({ canvas, viewport, transform }).promise
-                const jpeg = await canvasToJpeg(canvas)
-                const image = await output.embedJpg(await jpeg.arrayBuffer())
-                output
-                    .addPage([pageSize.width, pageSize.height])
-                    .drawImage(image, { x: 0, y: 0, width: pageSize.width, height: pageSize.height })
+                const image = await output.embedJpg(await (await canvasToJpeg(canvas)).arrayBuffer())
+                output.addPage([width, height]).drawImage(image, { x: 0, y: 0, width, height })
             } finally {
                 page.cleanup()
                 canvas.width = canvas.height = 0
@@ -64,6 +57,6 @@ export async function flattenPdf(bytes: Uint8Array): Promise<Uint8Array> {
         }
         return await output.save()
     } finally {
-        await loadingTask.destroy()
+        await Promise.all([sourceTask.destroy(), overlayTask?.destroy()])
     }
 }

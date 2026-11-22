@@ -52,6 +52,9 @@ importers:
       pdf-lib:
         specifier: ^1.17.1
         version: 1.17.1
+      pdfjs-dist:
+        specifier: ^6.5.438
+        version: 6.5.438
       react:
         specifier: 19.3.1
         version: 19.3.1
@@ -61,9 +64,6 @@ importers:
       react-hook-form:
         specifier: ^7.92.0
         version: 7.92.0(@types/react@19.3.0)(react@19.3.1)
-      react-pdf:
-        specifier: ^11.1.0
-        version: 11.1.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       tailwind-merge:
         specifier: ^3.7.1
         version: 3.7.1
@@ -1621,10 +1621,6 @@ packages:
     resolution: {integrity: sha512-8QmQKqEASLd5nx0U1B1okLElbUuuttJ/AnYmRXbbbGDWh6uS208EjD4Xqq/I9wK7u0v6O08XhTWnt5XtEbR6Dg==}
     engines: {node: '>= 0.4'}
 
-  dequal@2.0.3:
-    resolution: {integrity: sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==}
-    engines: {node: '>=6'}
-
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
@@ -1685,9 +1681,6 @@ packages:
   es-to-primitive@1.3.0:
     resolution: {integrity: sha512-w+5mJ3GuFL+NjVtJlvydShqE1eN3h3PbI7/5LAsYJP/2qtuMXjfL2LpHSRqo4b4eSF5K/DH1JXKUAHSB2UW50g==}
     engines: {node: '>= 0.4'}
-
-  es-toolkit@1.53.2:
-    resolution: {integrity: sha512-iUqZ+NlwH4jUgRmXZUxFBsV/9762TQEa1O4IXLFBmDEjVHScBytKuseX23I0+v9ShZ5MYxEx6WKNzm6IPnex8g==}
 
   escalade@3.2.0:
     resolution: {integrity: sha512-WUj2qlxaQtO4g6Pq5c29GTcWGDyd8itL8zTlipgECz3JesAiiOKotd8JU6otB3PACgG6xkJUyVhboMS+bje/jA==}
@@ -2296,23 +2289,9 @@ packages:
   magic-string@1.4.5:
     resolution: {integrity: sha512-oLLC2+YvQUfAa+vxoufE/yc1icb87M9iXIRqAoR/2EhE/8cb3SF/+Gi0c2By1B+5Vz2e2vQtUvHiu1+63Znh+w==}
 
-  make-cancellable-promise@2.0.0:
-    resolution: {integrity: sha512-3SEQqTpV9oqVsIWqAcmDuaNeo7yBO3tqPtqGRcKkEo0lrzD3wqbKG9mkxO65KoOgXqj+zH2phJ2LiAsdzlogSw==}
-
-  make-event-props@2.0.0:
-    resolution: {integrity: sha512-G/hncXrl4Qt7mauJEXSg3AcdYzmpkIITTNl5I+rH9sog5Yw0kK6vseJjCaPfOXqOqQuPUP89Rkhfz5kPS8ijtw==}
-
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
-
-  merge-refs@2.0.1:
-    resolution: {integrity: sha512-Rzt5Y3No6J7Cg9pIRyL1dTAB2dtUUXlV/5oMWnWRno58SDctbO43IJpvYyBZaC+2otLENbw90oGi3/xNcCTbvQ==}
-    peerDependencies:
-      '@types/react': ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-    peerDependenciesMeta:
-      '@types/react':
-        optional: true
 
   merge-stream@2.0.0:
     resolution: {integrity: sha512-abv/qOcuPfk3URPfDzmZU1LKmuw8kT+0nIHvKrKgFrwifol/doWcdA4ZqsWQ8ENrFKkd67Mfpo/LovbIUsbt3w==}
@@ -2540,16 +2519,6 @@ packages:
 
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
-
-  react-pdf@11.1.0:
-    resolution: {integrity: sha512-k6XF2jtWRD7E66BTIyoe80iXJVSecf5XFpFs76fYo4EJcpdLbLl2hI1kGIFe3cpZAsU6Feh+1RqTWr/emU2dKg==}
-    peerDependencies:
-      '@types/react': ^19.0.0
-      react: ^19.0.0
-      react-dom: ^19.0.0
-    peerDependenciesMeta:
-      '@types/react':
-        optional: true
 
   react@19.3.1:
     resolution: {integrity: sha512-QNhWdt7nrgVWWQG58QuGsAR3jv3Hbe4mb4vz7w2csnHavciZJgda1CPNaldF6eVxv90ud3jUXpKlHL69gO38yw==}
@@ -2790,9 +2759,6 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
-  tiny-invariant@1.3.3:
-    resolution: {integrity: sha512-+FbBPE1o9QAYvviau/qC5SE3caw21q3xkvWKBtja5vgqOWIHHJ3ioaq1VPfn/Szqctz2bU/oYeKd9/z5BL+PVg==}
-
   tinyglobby@0.2.15:
     resolution: {integrity: sha512-j2Zq4NyQYG5XMST4cbs02Ak8iJUdxRM0XI5QyxXuZOzKOINmWurp3smXu3y5wDcJrptwpSjgXHzIQxR0omXljQ==}
     engines: {node: '>=12.0.0'}
@@ -2882,9 +2848,6 @@ packages:
 
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
-
-  warning@4.0.3:
-    resolution: {integrity: sha512-rpJyN222KWIvHJ/F53XSZv0Zl/accqHR8et1kpaMTD/fLCRxtV8iX8czMzY7sVZupTI3zcUTg8eycS2kNF9l6w==}
 
   watchpack@2.5.0:
     resolution: {integrity: sha512-e6vZvY6xboSwLz2GD36c16+O/2Z6fKvIf4pOXptw2rY9MVwE/TXc6RGqxD3I3x0a28lwBY7DE+76uTPSsBrrCA==}
@@ -4336,8 +4299,6 @@ snapshots:
       has-property-descriptors: 1.0.2
       object-keys: 1.1.1
 
-  dequal@2.0.3: {}
-
   detect-libc@2.1.2: {}
 
   doctrine@2.1.0:
@@ -4464,8 +4425,6 @@ snapshots:
       is-callable: 1.2.7
       is-date-object: 1.1.0
       is-symbol: 1.1.1
-
-  es-toolkit@1.53.2: {}
 
   escalade@3.2.0: {}
 
@@ -5136,15 +5095,7 @@ snapshots:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  make-cancellable-promise@2.0.0: {}
-
-  make-event-props@2.0.0: {}
-
   math-intrinsics@1.1.0: {}
-
-  merge-refs@2.0.1(@types/react@19.3.0):
-    optionalDependencies:
-      '@types/react': 19.3.0
 
   merge-stream@2.0.0:
     optional: true
@@ -5389,22 +5340,6 @@ snapshots:
       '@types/react': 19.3.0
 
   react-is@16.13.1: {}
-
-  react-pdf@11.1.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
-    dependencies:
-      clsx: 2.1.1
-      dequal: 2.0.3
-      es-toolkit: 1.53.2
-      make-cancellable-promise: 2.0.0
-      make-event-props: 2.0.0
-      merge-refs: 2.0.1(@types/react@19.3.0)
-      pdfjs-dist: 6.5.438
-      react: 19.3.1
-      react-dom: 19.3.1(react@19.3.1)
-      tiny-invariant: 1.3.3
-      warning: 4.0.3
-    optionalDependencies:
-      '@types/react': 19.3.0
 
   react@19.3.1: {}
 
@@ -5735,8 +5670,6 @@ snapshots:
       source-map-support: 0.5.21
     optional: true
 
-  tiny-invariant@1.3.3: {}
-
   tinyglobby@0.2.15:
     dependencies:
       fdir: 6.5.0(picomatch@4.0.7)
@@ -5870,10 +5803,6 @@ snapshots:
   uri-js@4.4.1:
     dependencies:
       punycode: 2.3.1
-
-  warning@4.0.3:
-    dependencies:
-      loose-envify: 1.4.0
 
   watchpack@2.5.0:
     dependencies:

@@ -9,7 +9,8 @@ import {
 } from 'pdf-lib'
 
 export type SourceFile = { name: string; bytes: Uint8Array }
-export type ProcessResult = { files: SourceFile[]; rejected: string[] }
+/** `archives`: the selected files that were ZIP archives (detected from their bytes). */
+export type ProcessResult = { files: SourceFile[]; rejected: string[]; archives: string[] }
 
 // Bounds for archives: nested ZIPs and huge batches would otherwise exhaust the tab's memory.
 const MAX_ZIP_DEPTH = 3
@@ -136,6 +137,7 @@ async function processBuffer(
     budget: Budget,
 ) {
     const type = await detectType(name, declaredType, bytes)
+    if (type === 'application/zip' && depth === 0) result.archives.push(name)
     if (type === 'application/zip') {
         if (depth >= MAX_ZIP_DEPTH) {
             result.rejected.push(name)
@@ -176,7 +178,7 @@ async function processBuffer(
 
 /** Reads the selected files, expands ZIP archives and converts images to PDF. */
 export async function processFiles(files: File[]): Promise<ProcessResult> {
-    const result: ProcessResult = { files: [], rejected: [] }
+    const result: ProcessResult = { files: [], rejected: [], archives: [] }
     const budget: Budget = { bytes: 0, entries: 0 }
     for (const file of files) {
         budget.bytes += file.size
@@ -203,19 +205,21 @@ export function isLimitError(error: unknown): error is Error {
 export function uniqueNames(names: string[]) {
     const files = new Set<string>()
     const folders = new Set<string>()
+    // NFC: "é" composed or decomposed are the same file name once extracted (e.g. on macOS).
+    const keyOf = (path: string) => path.normalize('NFC').toLowerCase()
     const parents = (path: string) => path.split('/').slice(0, -1).map((_, i, all) => all.slice(0, i + 1).join('/'))
     const isFree = (path: string) =>
         !files.has(path) && !folders.has(path) && parents(path).every((parent) => !files.has(parent))
     return names.map((original) => {
         // Renaming the file cannot help when one of its folders is already a file: flatten its path.
-        const name = parents(original.toLowerCase()).some((parent) => files.has(parent))
+        const name = parents(keyOf(original)).some((parent) => files.has(parent))
             ? original.replace(/\//g, '_')
             : original
         let candidate = name
-        for (let i = 2; !isFree(candidate.toLowerCase()); i++) {
+        for (let i = 2; !isFree(keyOf(candidate)); i++) {
             candidate = name.replace(/(\.[^./]*)?$/, (ext) => ` (${i})${ext}`)
         }
-        const key = candidate.toLowerCase()
+        const key = keyOf(candidate)
         files.add(key)
         parents(key).forEach((parent) => folders.add(parent))
         return candidate

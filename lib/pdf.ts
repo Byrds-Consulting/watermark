@@ -27,18 +27,13 @@ export async function getUnsupportedWatermarkChars(text: string) {
     return [...new Set(Array.from(text).filter((char) => char !== '\n' && !charset.has(char.codePointAt(0)!)))]
 }
 
-async function loadPDF(existingPdfBytes: Uint8Array) {
-    // try {
-    return await PDFDocument.load(existingPdfBytes)
-    // TODO: Handles errors gracefully (ex: alert if a pdf is password protected)
-    // } catch (err) {
-    //     console.error('Encrypted file')
-    //     return await PDFDocument.load(existingPdfBytes, { ignoreEncryption: true })
-    // }
-}
-
-export async function watermarkPdf(existingPdfBytes: Uint8Array, text = '') {
-    // Drop what the font cannot encode instead of throwing on the whole document.
+/**
+ * Builds a transparent PDF holding only the watermark, one page per size (the displayed size of the
+ * document's pages, in points). It is rendered over each page by lib/render.ts, for the preview and
+ * for the export alike.
+ */
+export async function createWatermarkOverlay(sizes: { width: number; height: number }[], text = '') {
+    // Drop what the font cannot encode instead of throwing (the UI blocks the download meanwhile).
     const unsupported = new Set(await getUnsupportedWatermarkChars(text))
     text = Array.from(text.replace(/\r\n?/g, '\n'))
         .filter((char) => !unsupported.has(char))
@@ -46,40 +41,31 @@ export async function watermarkPdf(existingPdfBytes: Uint8Array, text = '') {
     while (text.length < 10) {
         text = ` ${text} `
     }
-    //   const url = 'https://pdf-lib.js.org/assets/with_update_sections.pdf'
-    //   const existingPdfBytes = await fetch(url).then(res => res.arrayBuffer())
 
-    const pdfDoc = await loadPDF(existingPdfBytes)
-    // pdf-lib would otherwise add a blank, unwatermarked page on save.
-    if (pdfDoc.getPageCount() === 0) throw new Error('PDF without pages')
-    // Form fields are annotations, drawn over the page content (and the watermark) by viewers:
-    // merge them into the page content first. Best effort, the export flattens everything anyway.
-    try {
-        pdfDoc.getForm().flatten()
-    } catch {
-        // Unusual form structures: keep the fields as they are.
-    }
+    const pdfDoc = await PDFDocument.create()
     const helveticaFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+    const textLines = text.split('\n')
+    const textMaxLength = textLines.reduce((res, str) => Math.max(res, str.length), 0)
+    // Width of the longest line at font size 1, measured with the actual glyphs.
+    const textMaxWidth = textLines.reduce(
+        (res, str) => Math.max(res, helveticaFont.widthOfTextAtSize(str, 1)),
+        0,
+    )
 
-    const pages = pdfDoc.getPages()
-    for (const page of pages) {
-        // Place the watermark in the visible area: the crop box clipped to the media box, whose
-        // origin is not always (0, 0).
-        const media = page.getMediaBox()
-        const crop = page.getCropBox()
-        const originX = Math.max(media.x, crop.x)
-        const originY = Math.max(media.y, crop.y)
-        const width = Math.max(1, Math.min(media.x + media.width, crop.x + crop.width) - originX)
-        const height = Math.max(1, Math.min(media.y + media.height, crop.y + crop.height) - originY)
-        const textMaxLength = text.split('\n').reduce((res, str) => Math.max(res, str.length), 0)
-
-        // Sized on the shorter side, so that lines fit along the diagonal of landscape pages too.
-        const size = (1.1 * (2 * Math.min(width, height))) / textMaxLength
+    for (const { width, height } of sizes) {
+        const page = pdfDoc.addPage([width, height])
+        const shortSide = Math.min(width, height)
+        // Character-based size (the historical look), capped so that the longest line, drawn at 45°,
+        // fits within the page in both directions (landscape pages, wide glyphs like "W").
+        const size = Math.min(
+            (1.1 * (2 * shortSide)) / textMaxLength,
+            (0.95 * shortSide) / (Math.max(textMaxWidth, 0.01) * cos45),
+        )
         const multiText = layoutMultilineText(text, {
             alignment: TextAlignment.Center,
             font: helveticaFont,
             fontSize: size,
-            bounds: { x: 0, y: 0, width: 10000, height: 10000 },
+            bounds: { x: 0, y: 0, width: 100000, height: 100000 },
         })
         const maxMultilineWidth = multiText.lines.reduce((res, str) => Math.max(res, str.width), 0)
 
@@ -89,36 +75,24 @@ export async function watermarkPdf(existingPdfBytes: Uint8Array, text = '') {
             size: number
             lineHeight: number
         } = {
-            x: originX + (width - (maxMultilineWidth + size) * cos45) / 2,
-            y: originY + height / 2,
+            x: (width - (maxMultilineWidth + size) * cos45) / 2,
+            y: height / 2,
             size,
             font: helveticaFont,
             lineHeight: size,
-            // color: rgb(0.95, 0.1, 0.1),
             color: rgb(1, 0, 0),
             opacity: 0.25,
             wordBreaks: [' '],
             rotate: degrees(-45),
         }
         const optimalLines = 5
-        const lines = Math.max(
-            optimalLines,
-            Math.ceil((optimalLines * height) / width),
-        )
+        const lines = Math.max(optimalLines, Math.ceil((optimalLines * height) / width))
         for (const n of Array(lines).keys()) {
             for (let i = 0; i < multiText.lines.length; i++) {
+                // Centered line by line
                 const xOffset = Math.abs(maxMultilineWidth - multiText.lines[i].width) / 2
                 page.drawText(`${multiText.lines[i].text}`, {
                     ...textOptions,
-
-                    // Centered as a block
-                    // x: textOptions.x + (xOffset - i * textOptions.lineHeight) * cos45,
-                    // y:
-                    //     textOptions.y -
-                    //     (xOffset + i * textOptions.lineHeight) * sin45 -
-                    //     ((n - lines / 2) * height) / (lines - 3),
-
-                    // Centered line by line
                     x: textOptions.x + xOffset * cos45,
                     y:
                         textOptions.y -
@@ -128,23 +102,7 @@ export async function watermarkPdf(existingPdfBytes: Uint8Array, text = '') {
             }
         }
     }
-
-    pdfDoc.setTitle(pdfDoc.getTitle() || 'Dossier PDF avec watermark')
-    pdfDoc.setAuthor(pdfDoc.getAuthor() || 'Byrds Consulting')
-    pdfDoc.setSubject(pdfDoc.getSubject() || 'Dossier')
-    pdfDoc.setKeywords([...(pdfDoc.getKeywords() ?? []), 'dossier', 'pdf', 'watermark'])
-    pdfDoc.setProducer('Dossier PDF (https://dossierpdf.fr)')
-    pdfDoc.setCreator(pdfDoc.getCreator() || 'Dossier PDF (https://dossierpdf.fr)')
-    try {
-        pdfDoc.setCreationDate(pdfDoc.getCreationDate() || new Date())
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (error) {
-        pdfDoc.setCreationDate(new Date())
-    }
-    pdfDoc.setModificationDate(new Date())
-
-    const pdfBytes = await pdfDoc.save()
-    return pdfBytes
+    return await pdfDoc.save()
 }
 
 export function downloadBlob(fileName: string, blob: Blob) {
