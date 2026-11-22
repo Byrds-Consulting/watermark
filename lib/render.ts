@@ -25,12 +25,12 @@ const pdfjsOptions = {
 
 export type PageSize = { width: number; height: number }
 
-export function loadPdf(source: Uint8Array | string): PDFDocumentLoadingTask {
+export function loadPdf(source: Uint8Array | string, { enableXfa = false } = {}): PDFDocumentLoadingTask {
     return pdfjs.getDocument(
         typeof source === 'string'
-            ? { ...pdfjsOptions, url: source }
+            ? { ...pdfjsOptions, enableXfa, url: source }
             : // pdf.js transfers the buffer to its worker: give it a copy.
-              { ...pdfjsOptions, data: source.slice() },
+              { ...pdfjsOptions, enableXfa, data: source.slice() },
     )
 }
 
@@ -50,13 +50,13 @@ export async function getPageSizes(doc: PDFDocumentProxy): Promise<PageSize[]> {
  * a "please wait" placeholder page).
  */
 export async function isReadablePdf(bytes: Uint8Array) {
-    const task = loadPdf(bytes)
+    // XFA parsing enabled here only, so that pdf.js reports documents that need XFA rendering
+    // (/NeedsRendering, XFA data and no AcroForm fields): their static page is a placeholder.
+    // Documents that merely carry XFA data next to usable static pages are accepted.
+    const task = loadPdf(bytes, { enableXfa: true })
     try {
         const doc = await task.promise
-        // `isPureXfa` is only computed with XFA rendering enabled: read the form flags instead.
-        const { info } = (await doc.getMetadata()) as { info: { IsXFAPresent?: boolean; IsAcroFormPresent?: boolean } }
-        const isPureXfa = !!info.IsXFAPresent && !info.IsAcroFormPresent
-        return doc.numPages > 0 && !isPureXfa
+        return doc.numPages > 0 && !doc.isPureXfa
     } catch {
         return false
     } finally {

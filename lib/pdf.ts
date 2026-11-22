@@ -3,6 +3,9 @@ import { degrees, PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 /** Longest watermark accepted, in lines (the UI explains it, the overlay truncates defensively). */
 export const MAX_WATERMARK_LINES = 10
 
+// Tiling steps on each side of the centred copy, in each direction.
+const MAX_TILE_STEPS = 20
+
 const cos45 = 0.70710678119
 const sin45 = 0.70710678119
 
@@ -79,16 +82,20 @@ export async function createWatermarkOverlay(
         const rowSpacing = Math.max(blockHeight + 0.6 * size, 0.2 * Math.max(width, height) * cos45)
         const columnSpacing = maxWidth1 * size + 1.5 * size
         const halfDiagonal = Math.hypot(width, height) / 2
-        const rows = Math.ceil(halfDiagonal / rowSpacing) + 1
-        const columns = Math.ceil(halfDiagonal / columnSpacing) + 1
-        // A copy whose bounding circle does not reach the page is not drawn.
+        // Bounded, so that degenerate page sizes (e.g. 1440 × 1 pt) cannot generate millions of
+        // copies; normal pages need far fewer steps (A4: 6 rows, 2 columns on each side).
+        const rows = Math.min(MAX_TILE_STEPS, Math.ceil(halfDiagonal / rowSpacing) + 1)
+        const columns = Math.min(MAX_TILE_STEPS, Math.ceil(halfDiagonal / columnSpacing) + 1)
+        // A copy whose bounding circle does not reach the page rectangle is not drawn.
         const blockRadius = Math.hypot(maxWidth1 * size, blockHeight) / 2
         for (let k = -rows; k <= rows; k++) {
             for (let j = -columns; j <= columns; j++) {
                 const shift = (j + (Math.abs(k) % 2) / 2) * columnSpacing
                 const centerX = width / 2 + k * rowSpacing * up.x + shift * along.x
                 const centerY = height / 2 + k * rowSpacing * up.y + shift * along.y
-                if (Math.hypot(centerX - width / 2, centerY - height / 2) > halfDiagonal + blockRadius) continue
+                const outsideX = Math.max(Math.abs(centerX - width / 2) - width / 2, 0)
+                const outsideY = Math.max(Math.abs(centerY - height / 2) - height / 2, 0)
+                if (Math.hypot(outsideX, outsideY) > blockRadius) continue
                 lines.forEach((line, i) => {
                     if (!line) return // blank lines only take room
                     const lineWidth = lineWidths1[i] * size
