@@ -25,13 +25,26 @@ const pdfjsOptions = {
 
 export type PageSize = { width: number; height: number }
 
-export function loadPdf(source: Uint8Array | string, { enableXfa = false } = {}): PDFDocumentLoadingTask {
+export function loadPdf(
+    source: Uint8Array | string,
+    { enableXfa = false, worker }: { enableXfa?: boolean; worker?: pdfjs.PDFWorker } = {},
+): PDFDocumentLoadingTask {
     return pdfjs.getDocument(
         typeof source === 'string'
-            ? { ...pdfjsOptions, enableXfa, url: source }
+            ? { ...pdfjsOptions, enableXfa, worker, url: source }
             : // pdf.js transfers the buffer to its worker: give it a copy.
-              { ...pdfjsOptions, enableXfa, data: source.slice() },
+              { ...pdfjsOptions, enableXfa, worker, data: source.slice() },
     )
+}
+
+// Upper bound for validating one file (malformed files can keep the pdf.js worker busy forever).
+const VALIDATION_TIMEOUT_MS = 20_000
+
+function withTimeout<T>(promise: Promise<T>, ms: number) {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Timed out')), ms)
+        promise.then(resolve, reject).finally(() => clearTimeout(timer))
+    })
 }
 
 /** Displayed size of every page, in PDF points (crop box and /Rotate applied). */
@@ -53,14 +66,18 @@ export async function isReadablePdf(bytes: Uint8Array) {
     // XFA parsing enabled here only, so that pdf.js reports documents that need XFA rendering
     // (/NeedsRendering, XFA data and no AcroForm fields): their static page is a placeholder.
     // Documents that merely carry XFA data next to usable static pages are accepted.
-    const task = loadPdf(bytes, { enableXfa: true })
+    // A dedicated worker, terminated afterwards: tearing down a document can hang after some XFA
+    // loading failures, and must never block the upload of the other files.
+    const worker = new pdfjs.PDFWorker()
+    const task = loadPdf(bytes, { enableXfa: true, worker })
     try {
-        const doc = await task.promise
+        const doc = await withTimeout(task.promise, VALIDATION_TIMEOUT_MS)
         return doc.numPages > 0 && !doc.isPureXfa
     } catch {
         return false
     } finally {
-        await task.destroy()
+        void task.destroy().catch(() => {})
+        worker.destroy()
     }
 }
 

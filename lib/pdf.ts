@@ -3,8 +3,8 @@ import { degrees, PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 /** Longest watermark accepted, in lines (the UI explains it, the overlay truncates defensively). */
 export const MAX_WATERMARK_LINES = 10
 
-// Tiling steps on each side of the centred copy, in each direction.
-const MAX_TILE_STEPS = 20
+// Safety bound on the tiling: rows on each side of the centred copy, half the copies per row.
+const MAX_TILE_STEPS = 50
 
 const cos45 = 0.70710678119
 const sin45 = 0.70710678119
@@ -79,20 +79,32 @@ export async function createWatermarkOverlay(
         const blockHeight = lines.length * size
         // Copies are tiled (staggered rows) along both directions, starting from one centred on the
         // page, which is therefore always complete, until the whole page is covered.
-        const rowSpacing = Math.max(blockHeight + 0.6 * size, 0.2 * Math.max(width, height) * cos45)
+        // Density from the page's geometric mean size, so that long narrow pages are covered evenly.
+        const rowSpacing = Math.max(blockHeight + 0.6 * size, 0.2 * Math.sqrt(width * height) * cos45)
         const columnSpacing = maxWidth1 * size + 1.5 * size
         const halfDiagonal = Math.hypot(width, height) / 2
-        // Bounded, so that degenerate page sizes (e.g. 1440 × 1 pt) cannot generate millions of
-        // copies; normal pages need far fewer steps (A4: 6 rows, 2 columns on each side).
+        // Bounded for degenerate page sizes (e.g. 14400 × 0.01 pt); A4 needs ~7 rows on each side.
         const rows = Math.min(MAX_TILE_STEPS, Math.ceil(halfDiagonal / rowSpacing) + 1)
-        const columns = Math.min(MAX_TILE_STEPS, Math.ceil(halfDiagonal / columnSpacing) + 1)
         // A copy whose bounding circle does not reach the page rectangle is not drawn.
         const blockRadius = Math.hypot(maxWidth1 * size, blockHeight) / 2
         for (let k = -rows; k <= rows; k++) {
-            for (let j = -columns; j <= columns; j++) {
-                const shift = (j + (Math.abs(k) % 2) / 2) * columnSpacing
-                const centerX = width / 2 + k * rowSpacing * up.x + shift * along.x
-                const centerY = height / 2 + k * rowSpacing * up.y + shift * along.y
+            // Row k is the line through `base` along the text direction: keep the part of it that
+            // crosses the page rectangle widened by blockRadius (parameter t along `along`).
+            const baseX = width / 2 + k * rowSpacing * up.x
+            const baseY = height / 2 + k * rowSpacing * up.y
+            const tMin = Math.max((-blockRadius - baseX) / along.x, (baseY - height - blockRadius) / -along.y)
+            const tMax = Math.min((width + blockRadius - baseX) / along.x, (baseY + blockRadius) / -along.y)
+            if (tMin > tMax) continue
+            const stagger = (Math.abs(k) % 2) / 2
+            const firstColumn = Math.ceil(tMin / columnSpacing - stagger)
+            const lastColumn = Math.min(
+                Math.floor(tMax / columnSpacing - stagger),
+                firstColumn + 2 * MAX_TILE_STEPS,
+            )
+            for (let j = firstColumn; j <= lastColumn; j++) {
+                const shift = (j + stagger) * columnSpacing
+                const centerX = baseX + shift * along.x
+                const centerY = baseY + shift * along.y
                 const outsideX = Math.max(Math.abs(centerX - width / 2) - width / 2, 0)
                 const outsideY = Math.max(Math.abs(centerY - height / 2) - height / 2, 0)
                 if (Math.hypot(outsideX, outsideY) > blockRadius) continue
