@@ -7,6 +7,9 @@ import * as Sentry from '@sentry/nextjs'
 Sentry.init({
     dsn: 'https://cf7ec7737801f3cbaa0aa33dea8c40fa@o4508247932010496.ingest.de.sentry.io/4508247933517904',
 
+    // Answer the browser's tunnelled requests (`tunnel: true` in instrumentation-client.ts).
+    integrations: [Sentry.serveTunnelIntegration()],
+
     // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
     tracesSampleRate: 1,
 

@@ -5,7 +5,7 @@ import '@ungap/with-resolvers'
 import * as zip from '@zip.js/zip.js'
 import { fileTypeFromBuffer } from 'file-type'
 import jschardet from 'jschardet'
-import { captureException } from '@sentry/browser'
+import { captureException } from '@sentry/nextjs'
 
 import Image from 'next/image'
 import { useForm } from 'react-hook-form'
@@ -220,7 +220,7 @@ export const App = () => {
                             {/* <Image
                                 priority
                                 aria-hidden
-                                className="inline align-baseline mx-2 top-[1px] relative"
+                                className="inline align-baseline mx-2 top-px relative"
                                 style={{ color: 'red' }}
                                 src="img/watermark-logo.svg"
                                 width={27}
@@ -255,7 +255,7 @@ export const App = () => {
                         <FileDropzone onFile={onDrop} />
                         <form className="w-full space-y-8" onSubmit={handleSubmit(downloadPDF)}>
                             <textarea
-                                className="flex min-h-[60px] w-full rounded-md border border-input bg-[#f6fff0] px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:cursor-not-allowed opacity-80 disabled:opacity-50 resize-none text-center"
+                                className="flex min-h-[60px] w-full rounded-md border border-input bg-[#f6fff0] px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:cursor-not-allowed opacity-80 disabled:opacity-50 resize-none text-center"
                                 placeholder="Éditez votre filigram"
                                 // placeholder={`Valide uniquement pour dossier de location&#10;le ${intl.format(
                                 //     new Date(),

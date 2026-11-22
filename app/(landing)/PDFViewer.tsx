@@ -3,12 +3,15 @@
 import React, { useLayoutEffect, useRef, useState } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 
-import 'react-pdf/dist/esm/Page/AnnotationLayer.css'
-import 'react-pdf/dist/esm/Page/TextLayer.css'
+import 'react-pdf/dist/Page/AnnotationLayer.css'
+import 'react-pdf/dist/Page/TextLayer.css'
 import './PDFViewer.css'
 
-// pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdf.worker.min.mjs', import.meta.url).toString()
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+// Bundle the worker instead of loading it from a third-party CDN: the files never leave the browser.
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url,
+).toString()
 
 export default function PDFViewer({
     file,
@@ -35,13 +38,15 @@ export default function PDFViewer({
         <div className="PDFViewer w-full" ref={componentRef}>
             <Document
                 className={`pdf_${fileId}`}
+                // react-pdf >= 10 suspends by default; keep the loading/error props behaviour.
+                suspense={false}
                 file={
                     file ??
                     // 'https://raw.githubusercontent.com/wojtekmaj/react-pdf/5bcddeb2255712c4f261104f0d62d51005039e25/sample/next-app/public/sample.pdf' ??
                     'sample.pdf'
                 }
                 onLoadSuccess={(e) => {
-                    setNumPages(e._pdfInfo.numPages)
+                    setNumPages(e.numPages)
                 }}
             >
                 {Array.from(

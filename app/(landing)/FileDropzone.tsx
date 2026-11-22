@@ -38,7 +38,7 @@ export function FileDropzone({ onFile }: { onFile: (files: File[]) => void }) {
         <div className="w-full mx-auto">
             <div
                 className={cn(
-                    'border-[1px] border-dashed border-black/50 rounded-lg p-8 pb-0 text-center cursor-pointer hover:border-[#3CDC1E] bg-white/15 hover:bg-[#d7fbcc]/15 transition-colors',
+                    'border border-dashed border-black/50 rounded-lg p-8 pb-0 text-center cursor-pointer hover:border-[#3CDC1E] bg-white/15 hover:bg-[#d7fbcc]/15 transition-colors',
                     {
                         'bg-[#d7fbcc]/15': dragOver,
                         'border-[#3CDC1E]': dragOver,
