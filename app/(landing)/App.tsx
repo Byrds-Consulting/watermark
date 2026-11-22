@@ -27,8 +27,10 @@ const PDFViewer = dynamic(() => import('./PDFViewer'), {
 
 /** The uploaded dossier. `id` changes on every upload, so stale async results can be detected. */
 type Dossier = { id: number; archiveName: string | null; files: SourceFile[] }
-/** The dossier with the watermark applied, for one dossier `id` and one watermark text. */
+/** The dossier with the watermark applied (for the preview), for one dossier `id` and one text. */
 type Watermarked = { dossierId: number; text: string; files: SourceFile[]; failed: string[] }
+/** Something that belongs to one dossier only, and must disappear when another one is uploaded. */
+type ForDossier<T> = { dossierId: number; value: T }
 
 function formatList(names: string[]) {
     return names.map((name) => `« ${name} »`).join(', ')
@@ -38,7 +40,9 @@ export const App = () => {
     const [dossier, setDossier] = useState<Dossier | null>(null)
     const [watermarked, setWatermarked] = useState<Watermarked | null>(null)
     const [uploadError, setUploadError] = useState<string | null>(null)
-    const [downloadError, setDownloadError] = useState<string | null>(null)
+    const [downloadError, setDownloadError] = useState<ForDossier<string> | null>(null)
+    // Files whose export failed, excluded from the next download attempts of the same dossier.
+    const [excluded, setExcluded] = useState<ForDossier<string[]> | null>(null)
     const [unsupportedChars, setUnsupportedChars] = useState<string[]>([])
     const [isUploading, setIsUploading] = useState(false)
     const [isDownloading, setIsDownloading] = useState(false)
@@ -54,8 +58,16 @@ export const App = () => {
         watermarked.text === watermarkText &&
         watermarkText === watermarkTextValue
     const hasWatermark = watermarkText.trim().length > 0 && unsupportedChars.length === 0
+    const exportableFiles = useMemo(() => {
+        if (!isCurrent || !dossier) return []
+        const excludedNames = excluded?.dossierId === dossier.id ? excluded.value : []
+        return dossier.files.filter(
+            (file) =>
+                watermarked.files.some((ok) => ok.name === file.name) && !excludedNames.includes(file.name),
+        )
+    }, [isCurrent, dossier, watermarked, excluded])
     const isReady =
-        isCurrent && watermarked.files.length > 0 && hasWatermark && !isUploading && !isDownloading
+        isCurrent && exportableFiles.length > 0 && hasWatermark && !isUploading && !isDownloading
 
     const onDrop = useCallback(
         async (acceptedFiles: File[]) => {
@@ -64,7 +76,6 @@ export const App = () => {
             const id = ++uploadId.current
             setIsUploading(true)
             setUploadError(null)
-            setDownloadError(null)
             try {
                 const { files, rejected } = await processFiles(acceptedFiles)
                 if (id !== uploadId.current) return // a newer upload superseded this one
@@ -135,36 +146,67 @@ export const App = () => {
     const downloadPDF = useCallback(async () => {
         if (!isReady || !dossier) return
         // Export exactly this generation, whatever the user does while it runs.
-        const { files } = watermarked
-        const { archiveName } = dossier
+        const { id: dossierId, archiveName } = dossier
+        const { text } = watermarked
+        const files = exportableFiles
+        const asZip = archiveName !== null || watermarked.files.length > 1
         plausible('File download')
         setIsDownloading(true)
         setDownloadError(null)
         try {
             const { flattenPdf } = await import('@/lib/flatten')
-            if (archiveName || files.length > 1) {
+            // Rasterize first (annotations and form fields included), then watermark the result:
+            // nothing from the source document can be drawn over the watermark.
+            const exported: SourceFile[] = []
+            const failures: string[] = []
+            for (const file of files) {
+                try {
+                    exported.push({ name: file.name, bytes: await watermarkPdf(await flattenPdf(file.bytes), text) })
+                } catch (error) {
+                    captureException(error)
+                    failures.push(file.name)
+                }
+            }
+            if (failures.length > 0) {
+                // Never download an incomplete dossier silently: exclude the files and let the user retry.
+                plausible('File download error')
+                setExcluded((previous) => ({
+                    dossierId,
+                    value: [...(previous?.dossierId === dossierId ? previous.value : []), ...failures],
+                }))
+                setDownloadError({
+                    dossierId,
+                    value:
+                        `Impossible de convertir ${formatList(failures)}, retiré du dossier.` +
+                        (exported.length > 0 ? ' Cliquez à nouveau sur « Télécharger » pour obtenir le reste.' : ''),
+                })
+                return
+            }
+            if (asZip) {
                 const zipWriter = new zip.ZipWriter(new zip.BlobWriter('application/zip'))
-                for (const file of files) {
-                    await zipWriter.add(file.name, new zip.Uint8ArrayReader(await flattenPdf(file.bytes)))
+                for (const file of exported) {
+                    await zipWriter.add(file.name, new zip.Uint8ArrayReader(file.bytes))
                 }
                 const today = new Date().toISOString().slice(0, 10)
                 downloadBlob(archiveName || `dossier_${today}.zip`, await zipWriter.close())
             } else {
-                const [file] = files
-                const pdfBytes = await flattenPdf(file.bytes)
+                const [file] = exported
                 downloadBlob(
                     file.name.split('/').pop()!,
-                    new Blob([pdfBytes as BlobPart], { type: 'application/pdf' }),
+                    new Blob([file.bytes as BlobPart], { type: 'application/pdf' }),
                 )
             }
         } catch (error) {
             captureException(error)
             plausible('File download error')
-            setDownloadError('La création du dossier a échoué. Réessayez ou importez moins de fichiers.')
+            setDownloadError({
+                dossierId,
+                value: 'La création du dossier a échoué. Réessayez ou importez moins de fichiers.',
+            })
         } finally {
             setIsDownloading(false)
         }
-    }, [isReady, dossier, watermarked, plausible])
+    }, [isReady, dossier, watermarked, exportableFiles, plausible])
 
     // Keep showing the previous watermark while the new text is being applied (no flicker).
     const previewFile =
@@ -174,6 +216,8 @@ export const App = () => {
         [previewFile],
     )
     const failedFiles = isCurrent ? watermarked.failed : []
+    const currentDownloadError =
+        dossier && downloadError?.dossierId === dossier.id ? downloadError.value : null
 
     return (
         <div className="flex w-full gap-8 h-screen">
@@ -244,7 +288,7 @@ export const App = () => {
                                         {formatList(failedFiles)}
                                     </p>
                                 ) : null}
-                                {downloadError ? <p>{downloadError}</p> : null}
+                                {currentDownloadError ? <p>{currentDownloadError}</p> : null}
                             </div>
                             <div className="flex justify-center">
                                 {dossier && dossier.files.length > 0 ? (

@@ -4,11 +4,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
 const reactPdfRequire = createRequire(require.resolve('react-pdf'))
 const pdfjsDir = path.dirname(reactPdfRequire.resolve('pdfjs-dist/package.json'))
-const target = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'public', 'pdfjs')
+const target = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'pdfjs')
 
 fs.rmSync(target, { recursive: true, force: true })
 for (const dir of ['wasm', 'cmaps', 'standard_fonts', 'iccs']) {

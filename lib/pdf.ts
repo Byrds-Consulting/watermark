@@ -50,15 +50,31 @@ export async function watermarkPdf(existingPdfBytes: Uint8Array, text = '') {
     //   const existingPdfBytes = await fetch(url).then(res => res.arrayBuffer())
 
     const pdfDoc = await loadPDF(existingPdfBytes)
+    // pdf-lib would otherwise add a blank, unwatermarked page on save.
+    if (pdfDoc.getPageCount() === 0) throw new Error('PDF without pages')
+    // Form fields are annotations, drawn over the page content (and the watermark) by viewers:
+    // merge them into the page content first. Best effort, the export flattens everything anyway.
+    try {
+        pdfDoc.getForm().flatten()
+    } catch {
+        // Unusual form structures: keep the fields as they are.
+    }
     const helveticaFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
 
     const pages = pdfDoc.getPages()
     for (const page of pages) {
-        // Place the watermark in the visible area, whose origin is not always (0, 0).
-        const { x: originX, y: originY, width, height } = page.getCropBox()
+        // Place the watermark in the visible area: the crop box clipped to the media box, whose
+        // origin is not always (0, 0).
+        const media = page.getMediaBox()
+        const crop = page.getCropBox()
+        const originX = Math.max(media.x, crop.x)
+        const originY = Math.max(media.y, crop.y)
+        const width = Math.max(1, Math.min(media.x + media.width, crop.x + crop.width) - originX)
+        const height = Math.max(1, Math.min(media.y + media.height, crop.y + crop.height) - originY)
         const textMaxLength = text.split('\n').reduce((res, str) => Math.max(res, str.length), 0)
 
-        const size = (1.1 * (2 * width)) / textMaxLength
+        // Sized on the shorter side, so that lines fit along the diagonal of landscape pages too.
+        const size = (1.1 * (2 * Math.min(width, height))) / textMaxLength
         const multiText = layoutMultilineText(text, {
             alignment: TextAlignment.Center,
             font: helveticaFont,
