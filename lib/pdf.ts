@@ -2,7 +2,7 @@ import {
     degrees,
     layoutMultilineText,
     PDFDocument,
-    PDFPageDrawTextOptions,
+    type PDFPageDrawTextOptions,
     rgb,
     StandardFonts,
     TextAlignment,
@@ -11,7 +11,23 @@ import {
 const cos45 = 0.70710678119
 const sin45 = 0.70710678119
 
-async function loadPDF(existingPdfBytes: ArrayBuffer) {
+let charsetPromise: Promise<Set<number>> | undefined
+/** Code points that the watermark font (Helvetica Bold, WinAnsi encoding) can draw. */
+function getWatermarkCharset() {
+    charsetPromise ??= (async () => {
+        const font = await (await PDFDocument.create()).embedFont(StandardFonts.HelveticaBold)
+        return new Set(font.getCharacterSet())
+    })()
+    return charsetPromise
+}
+
+/** Characters of `text` that cannot be drawn in the watermark (emoji, most non-Latin scripts, …). */
+export async function getUnsupportedWatermarkChars(text: string) {
+    const charset = await getWatermarkCharset()
+    return [...new Set(Array.from(text).filter((char) => char !== '\n' && !charset.has(char.codePointAt(0)!)))]
+}
+
+async function loadPDF(existingPdfBytes: Uint8Array) {
     // try {
     return await PDFDocument.load(existingPdfBytes)
     // TODO: Handles errors gracefully (ex: alert if a pdf is password protected)
@@ -21,19 +37,25 @@ async function loadPDF(existingPdfBytes: ArrayBuffer) {
     // }
 }
 
-export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
+export async function watermarkPdf(existingPdfBytes: Uint8Array, text = '') {
+    // Drop what the font cannot encode instead of throwing on the whole document.
+    const unsupported = new Set(await getUnsupportedWatermarkChars(text))
+    text = Array.from(text.replace(/\r\n?/g, '\n'))
+        .filter((char) => !unsupported.has(char))
+        .join('')
     while (text.length < 10) {
         text = ` ${text} `
     }
     //   const url = 'https://pdf-lib.js.org/assets/with_update_sections.pdf'
     //   const existingPdfBytes = await fetch(url).then(res => res.arrayBuffer())
 
-    const pdfDoc = await loadPDF(new Uint8Array(existingPdfBytes).buffer)
+    const pdfDoc = await loadPDF(existingPdfBytes)
     const helveticaFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
 
     const pages = pdfDoc.getPages()
     for (const page of pages) {
-        const { width, height } = page.getSize()
+        // Place the watermark in the visible area, whose origin is not always (0, 0).
+        const { x: originX, y: originY, width, height } = page.getCropBox()
         const textMaxLength = text.split('\n').reduce((res, str) => Math.max(res, str.length), 0)
 
         const size = (1.1 * (2 * width)) / textMaxLength
@@ -51,8 +73,8 @@ export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
             size: number
             lineHeight: number
         } = {
-            x: (width - (maxMultilineWidth + size) * cos45) / 2,
-            y: height / 2,
+            x: originX + (width - (maxMultilineWidth + size) * cos45) / 2,
+            y: originY + height / 2,
             size,
             font: helveticaFont,
             lineHeight: size,
@@ -65,7 +87,7 @@ export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
         const optimalLines = 5
         const lines = Math.max(
             optimalLines,
-            Math.ceil((optimalLines * page.getHeight()) / page.getWidth()),
+            Math.ceil((optimalLines * height) / width),
         )
         for (const n of Array(lines).keys()) {
             for (let i = 0; i < multiText.lines.length; i++) {
@@ -109,15 +131,12 @@ export async function test_modifyPdf(existingPdfBytes: ArrayBuffer, text = '') {
     return pdfBytes
 }
 
-export function test_downloadByteArray(
-    reportName: string,
-    data: BlobPart | Blob,
-    mimeType = 'application/pdf',
-) {
-    const blob = data instanceof Blob ? data : new Blob([data], { type: mimeType })
+export function downloadBlob(fileName: string, blob: Blob) {
+    const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
-    link.href = window.URL.createObjectURL(blob)
-    const fileName = reportName
+    link.href = url
     link.download = fileName
     link.click()
+    // Give the browser time to start the download before releasing the blob.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }

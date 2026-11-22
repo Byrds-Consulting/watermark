@@ -20,6 +20,7 @@ export function FileDropzone({ onFile }: { onFile: (files: File[]) => void }) {
     const handleDrop = useCallback(
         (event: React.DragEvent<HTMLDivElement>) => {
             event.preventDefault()
+            setDragOver(false)
             const files = Array.from(event.dataTransfer.files)
             onFile(files)
         },
@@ -29,6 +30,8 @@ export function FileDropzone({ onFile }: { onFile: (files: File[]) => void }) {
     const handleFileInput = useCallback(
         (event: React.ChangeEvent<HTMLInputElement>) => {
             const files = Array.from(event.target.files || [])
+            // Allow selecting the same file again (e.g. after editing it).
+            event.target.value = ''
             onFile(files)
         },
         [onFile],
@@ -51,13 +54,17 @@ export function FileDropzone({ onFile }: { onFile: (files: File[]) => void }) {
                 <input
                     type="file"
                     id="fileInput"
-                    className="hidden"
+                    // Visually hidden but focusable, so keyboard users can open the picker.
+                    className="sr-only peer"
                     onChange={handleFileInput}
                     // accept="*/*"
                     // accept="image/jpeg,image/gif,image/png,application/pdf,image/x-eps"
                     accept="image/jpeg,image/png,application/pdf,application/zip"
                 />
-                <label htmlFor="fileInput" className="cursor-pointer">
+                <label
+                    htmlFor="fileInput"
+                    className="block cursor-pointer rounded-md peer-focus-visible:ring-2 peer-focus-visible:ring-ring"
+                >
                     <DocumentArrowUpIcon className="mx-auto mb-4 h-8 w-8" />
                     <p className="mt-2 text-sm">Sélectionnez un fichier</p>
                 </label>

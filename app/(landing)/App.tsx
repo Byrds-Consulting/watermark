@@ -3,17 +3,16 @@
 import '@ungap/with-resolvers'
 
 import * as zip from '@zip.js/zip.js'
-import { fileTypeFromBuffer } from 'file-type'
 import { captureException } from '@sentry/nextjs'
 
 import Image from 'next/image'
 import { useForm } from 'react-hook-form'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePlausible } from 'next-plausible'
 
-import { PDFDocument } from 'pdf-lib'
 import { FileDropzone } from '@/app/(landing)/FileDropzone'
-import { test_downloadByteArray, test_modifyPdf } from '@/lib/pdf'
+import { downloadBlob, getUnsupportedWatermarkChars, watermarkPdf } from '@/lib/pdf'
+import { isLimitError, processFiles, uniqueNames, type SourceFile } from '@/lib/files'
 import dynamic from 'next/dynamic'
 import { ArrowDownCircleIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
@@ -26,187 +25,155 @@ const PDFViewer = dynamic(() => import('./PDFViewer'), {
     ssr: false,
 })
 
-function pdfBufferToBase64(pdf: Uint8Array) {
-    const data = pdf.buffer.slice(pdf.byteOffset, pdf.byteLength + pdf.byteOffset)
-    const base64 = Buffer.from(data).toString('base64')
-    return `data:application/pdf;base64,${base64}`
-}
+/** The uploaded dossier. `id` changes on every upload, so stale async results can be detected. */
+type Dossier = { id: number; archiveName: string | null; files: SourceFile[] }
+/** The dossier with the watermark applied, for one dossier `id` and one watermark text. */
+type Watermarked = { dossierId: number; text: string; files: SourceFile[]; failed: string[] }
 
-async function processFileBuffer(
-    fileName: string,
-    fileType: string,
-    buffer: ArrayBuffer,
-): Promise<[string[], Uint8Array[]]> {
-    const fileNameArray: string[] = []
-    const pdfArray: Uint8Array[] = []
-    console.log('Processing file:', fileName)
-    if (fileType === 'application/zip') {
-        const blob = new Blob([new Uint8Array(buffer)], { type: fileType })
-        const zipFileReader = new zip.BlobReader(blob)
-        // zip.js decodes names itself: UTF-8 flag, unflagged UTF-8 (macOS), CP437 otherwise, Unicode Path field.
-        const zipReader = new zip.ZipReader(zipFileReader, { strictness: 'tolerant' })
-        for (const fileEntry of await zipReader.getEntries()) {
-            if (!fileEntry || fileEntry.directory) continue
-            const uintArrayWriter = new zip.Uint8ArrayWriter()
-            const pdfFile = await fileEntry.getData?.(uintArrayWriter)
-            if (pdfFile) {
-                const typeInfo = await fileTypeFromBuffer(pdfFile)
-                if (typeInfo) {
-                    const [fileNames, pdfs] = await processFileBuffer(
-                        fileEntry.filename,
-                        typeInfo.mime,
-                        pdfFile.buffer as ArrayBuffer,
-                    )
-                    fileNameArray.push(...fileNames)
-                    pdfArray.push(...pdfs)
-                } else {
-                    console.log(`Ignoring: Unknown file type for "${fileEntry.filename}"`)
-                }
-            }
-        }
-        await zipReader.close()
-    } else if (fileType === 'application/pdf') {
-        fileNameArray.push(fileName)
-        pdfArray.push(new Uint8Array(buffer))
-    } else if (fileType === 'image/jpeg' || fileType === 'image/png') {
-        const pdfDoc = await PDFDocument.create()
-        const image =
-            fileType === 'image/png' ? await pdfDoc.embedPng(buffer) : await pdfDoc.embedJpg(buffer)
-        const imgDims = image.size()
-        const page = pdfDoc.addPage([imgDims.width, imgDims.height])
-        // const imgDims = image.scaleToFit(page.getWidth(), page.getHeight())
-        page.drawImage(image, {
-            x: page.getWidth() / 2 - imgDims.width / 2,
-            y: page.getHeight() / 2 - imgDims.height / 2,
-            width: imgDims.width,
-            height: imgDims.height,
-        })
-        const pdfBytes = await pdfDoc.save()
-        fileNameArray.push(fileName.replace(/\.(jpg|jpeg|png)$/i, '.pdf'))
-        pdfArray.push(pdfBytes)
-    } else {
-        console.log(`Ignoring: Unknown file type for "${fileName}" (${fileType})`)
-    }
-    return [fileNameArray, pdfArray]
-}
-
-async function processAllFiles(
-    files: File[],
-    watermarkText: string,
-): Promise<[string | null, string[], Uint8Array[]]> {
-    const fileNameArray: string[] = []
-    const pdfArray: Uint8Array[] = []
-    for (const file of files) {
-        const reader = new FileReader()
-        reader.readAsArrayBuffer(file)
-        const [fileNames, pdfs] = await new Promise<Awaited<ReturnType<typeof processFileBuffer>>>(
-            (resolve) => {
-                reader.onload = async (event) => {
-                    const buffer = event.target?.result
-                    if (buffer instanceof ArrayBuffer) {
-                        return resolve(processFileBuffer(file.name, file.type, buffer))
-                    }
-                    return resolve([[], []])
-                }
-            },
-        )
-        fileNameArray.push(...fileNames)
-        pdfArray.push(...pdfs)
-    }
-    if (files.length === 1 && files[0].type === 'application/zip') {
-        return [files[0].name, fileNameArray, pdfArray]
-    }
-    return [null, fileNameArray, pdfArray]
+function formatList(names: string[]) {
+    return names.map((name) => `« ${name} »`).join(', ')
 }
 
 export const App = () => {
-    const [originalFileName, setOriginalFileName] = useState<string | null>(null)
-    const [OriginalPDFArray, setOriginalPDFArray] = useState<Array<[string, Uint8Array]>>([])
-    const [pdfArray, setPDFArray] = useState<Array<[string, Uint8Array]>>([])
-    const { register, handleSubmit, watch } = useForm()
-    const watermarkTextValue = watch('watermark')
+    const [dossier, setDossier] = useState<Dossier | null>(null)
+    const [watermarked, setWatermarked] = useState<Watermarked | null>(null)
+    const [uploadError, setUploadError] = useState<string | null>(null)
+    const [downloadError, setDownloadError] = useState<string | null>(null)
+    const [unsupportedChars, setUnsupportedChars] = useState<string[]>([])
+    const [isUploading, setIsUploading] = useState(false)
+    const [isDownloading, setIsDownloading] = useState(false)
+    const uploadId = useRef(0)
+    const { register, handleSubmit, watch } = useForm<{ watermark: string }>()
+    const watermarkTextValue = watch('watermark') ?? ''
     const watermarkText = useDebounce<string>(watermarkTextValue, 200)
     const plausible = usePlausible()
 
-    const isReady = pdfArray.length > 0
+    const isCurrent =
+        dossier !== null &&
+        watermarked?.dossierId === dossier.id &&
+        watermarked.text === watermarkText &&
+        watermarkText === watermarkTextValue
+    const hasWatermark = watermarkText.trim().length > 0 && unsupportedChars.length === 0
+    const isReady =
+        isCurrent && watermarked.files.length > 0 && hasWatermark && !isUploading && !isDownloading
 
     const onDrop = useCallback(
         async (acceptedFiles: File[]) => {
+            if (acceptedFiles.length === 0) return
             plausible('File upload')
+            const id = ++uploadId.current
+            setIsUploading(true)
+            setUploadError(null)
+            setDownloadError(null)
             try {
-                const [originalFileName, fileNames, pdfs] = await processAllFiles(
-                    acceptedFiles,
-                    watermarkText,
-                )
-                if (pdfs.length > 0) {
-                    setOriginalFileName(originalFileName)
-                    setOriginalPDFArray(fileNames.map((fileName, idx) => [fileName, pdfs[idx]]))
-                    // setReady(true)
+                const { files, rejected } = await processFiles(acceptedFiles)
+                if (id !== uploadId.current) return // a newer upload superseded this one
+                const names = uniqueNames(files.map((file) => file.name))
+                const archiveName =
+                    acceptedFiles.length === 1 && files.length > 0 && /\.zip$/i.test(acceptedFiles[0].name)
+                        ? acceptedFiles[0].name
+                        : null
+                // Replace the previous dossier even when nothing usable was found: never keep
+                // offering a download of files the user meant to replace.
+                setDossier({ id, archiveName, files: files.map((file, idx) => ({ ...file, name: names[idx] })) })
+                if (files.length === 0) {
+                    setUploadError('Aucun fichier PDF, JPEG ou PNG exploitable n’a été trouvé.')
+                } else if (rejected.length > 0) {
+                    setUploadError(`Fichiers ignorés (format non supporté ou illisible) : ${formatList(rejected)}`)
                 }
             } catch (error) {
-                console.error('Error processing files:', error)
-                captureException(error)
+                if (id !== uploadId.current) return
+                setDossier(null)
+                setUploadError(
+                    isLimitError(error)
+                        ? `${error.message} : importez moins de fichiers à la fois.`
+                        : 'Impossible de lire ces fichiers.',
+                )
+                if (!isLimitError(error)) captureException(error)
                 plausible('File upload error')
+            } finally {
+                if (id === uploadId.current) setIsUploading(false)
             }
         },
-        [plausible, watermarkText],
+        [plausible],
     )
 
     useEffect(() => {
+        let cancelled = false
+        getUnsupportedWatermarkChars(watermarkText).then((chars) => {
+            if (!cancelled) setUnsupportedChars(chars)
+        })
+        return () => {
+            cancelled = true
+        }
+    }, [watermarkText])
+
+    useEffect(() => {
+        if (!dossier) return
+        let cancelled = false
         ;(async () => {
-            setPDFArray(
-                await Promise.all(
-                    OriginalPDFArray.map(async ([fileName, buffer]) => [
-                        fileName,
-                        await test_modifyPdf(buffer.buffer as ArrayBuffer, watermarkText || ''),
-                    ]),
-                ),
+            const results = await Promise.allSettled(
+                dossier.files.map(async (file) => ({
+                    name: file.name,
+                    bytes: await watermarkPdf(file.bytes, watermarkText),
+                })),
             )
+            if (cancelled) return // the dossier or the text changed meanwhile
+            const files: SourceFile[] = []
+            const failed: string[] = []
+            results.forEach((result, idx) => {
+                if (result.status === 'fulfilled') files.push(result.value)
+                else failed.push(dossier.files[idx].name)
+            })
+            setWatermarked({ dossierId: dossier.id, text: watermarkText, files, failed })
         })()
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [OriginalPDFArray, watermarkText])
+        return () => {
+            cancelled = true
+        }
+    }, [dossier, watermarkText])
 
     const downloadPDF = useCallback(async () => {
+        if (!isReady || !dossier) return
+        // Export exactly this generation, whatever the user does while it runs.
+        const { files } = watermarked
+        const { archiveName } = dossier
         plausible('File download')
-
-        // PDF Creation
-        async function pdfFromCanvas(fileName: string, idx: number) {
-            const allPages = document.querySelectorAll<HTMLCanvasElement>(
-                `.pdf_${idx} .react-pdf__Page__canvas`,
-            )
-            console.warn(`[${idx}] PDF render:`, fileName, `(${allPages.length} pages`)
-            const pdfDoc = await PDFDocument.create()
-            for (const canvas of allPages) {
-                const base64 = canvas.toDataURL('image/jpeg', 0.25)
-                const page = pdfDoc.addPage([canvas.width, canvas.height])
-                const image = await pdfDoc.embedJpg(base64)
-                page.drawImage(image, {
-                    x: 0,
-                    y: 0, // 250
-                    width: page.getWidth(),
-                    height: page.getHeight(),
-                })
+        setIsDownloading(true)
+        setDownloadError(null)
+        try {
+            const { flattenPdf } = await import('@/lib/flatten')
+            if (archiveName || files.length > 1) {
+                const zipWriter = new zip.ZipWriter(new zip.BlobWriter('application/zip'))
+                for (const file of files) {
+                    await zipWriter.add(file.name, new zip.Uint8ArrayReader(await flattenPdf(file.bytes)))
+                }
+                const today = new Date().toISOString().slice(0, 10)
+                downloadBlob(archiveName || `dossier_${today}.zip`, await zipWriter.close())
+            } else {
+                const [file] = files
+                const pdfBytes = await flattenPdf(file.bytes)
+                downloadBlob(
+                    file.name.split('/').pop()!,
+                    new Blob([pdfBytes as BlobPart], { type: 'application/pdf' }),
+                )
             }
-            return await pdfDoc.save()
+        } catch (error) {
+            captureException(error)
+            plausible('File download error')
+            setDownloadError('La création du dossier a échoué. Réessayez ou importez moins de fichiers.')
+        } finally {
+            setIsDownloading(false)
         }
+    }, [isReady, dossier, watermarked, plausible])
 
-        if (originalFileName || pdfArray.length > 1) {
-            const zipWriter = new zip.ZipWriter(new zip.BlobWriter('application/zip'))
-            for (const [idx, [fileName]] of pdfArray.entries()) {
-                const pdfBytes = await pdfFromCanvas(fileName, idx)
-                await zipWriter.add(fileName, new zip.Uint8ArrayReader(pdfBytes))
-            }
-            const zipFileBlob = await zipWriter.close()
-            test_downloadByteArray(
-                originalFileName || `dossier_${intl.format(new Date())}.zip`,
-                zipFileBlob,
-            )
-        } else if (pdfArray.length > 0) {
-            const [fileName] = pdfArray[0]
-            const pdfBytes = await pdfFromCanvas(fileName, 0)
-            test_downloadByteArray(fileName, pdfBytes as BlobPart)
-        }
-    }, [originalFileName, pdfArray, plausible])
+    // Keep showing the previous watermark while the new text is being applied (no flicker).
+    const previewFile =
+        dossier && watermarked?.dossierId === dossier.id ? watermarked.files[0] : undefined
+    const preview = useMemo(
+        () => (previewFile ? new Blob([previewFile.bytes as BlobPart], { type: 'application/pdf' }) : undefined),
+        [previewFile],
+    )
+    const failedFiles = isCurrent ? watermarked.failed : []
 
     return (
         <div className="flex w-full gap-8 h-screen">
@@ -252,6 +219,7 @@ export const App = () => {
                         <FileDropzone onFile={onDrop} />
                         <form className="w-full space-y-8" onSubmit={handleSubmit(downloadPDF)}>
                             <textarea
+                                aria-label="Texte du filigrane"
                                 className="flex min-h-[60px] w-full rounded-md border border-input bg-[#f6fff0] px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:cursor-not-allowed opacity-80 disabled:opacity-50 resize-none text-center"
                                 placeholder="Éditez votre filigram"
                                 // placeholder={`Valide uniquement pour dossier de location&#10;le ${intl.format(
@@ -264,15 +232,29 @@ export const App = () => {
                                     )}`,
                                 })}
                             ></textarea>
+                            <div className="space-y-2 text-center text-sm text-red-700" role="alert">
+                                {watermarkText.trim().length === 0 ? <p>Saisissez le texte du filigrane.</p> : null}
+                                {unsupportedChars.length > 0 ? (
+                                    <p>Caractères non pris en charge dans le filigrane : {unsupportedChars.join(' ')}</p>
+                                ) : null}
+                                {uploadError ? <p>{uploadError}</p> : null}
+                                {failedFiles.length > 0 ? (
+                                    <p>
+                                        Fichiers exclus du dossier (protégés par mot de passe ou endommagés) :{' '}
+                                        {formatList(failedFiles)}
+                                    </p>
+                                ) : null}
+                                {downloadError ? <p>{downloadError}</p> : null}
+                            </div>
                             <div className="flex justify-center">
-                                {isReady ? (
-                                    <Button
-                                        // onClick={downloadPDF}
-                                        disabled={!isReady}
-                                        type="submit"
-                                    >
+                                {dossier && dossier.files.length > 0 ? (
+                                    <Button disabled={!isReady} type="submit">
                                         <ArrowDownCircleIcon className="mx-auto mr-2 h-6 w-6" />
-                                        Télécharger le dossier
+                                        {isDownloading
+                                            ? 'Préparation du dossier…'
+                                            : isUploading || !isCurrent
+                                              ? 'Application du filigrane…'
+                                              : 'Télécharger le dossier'}
                                     </Button>
                                 ) : null}
                             </div>
@@ -298,29 +280,9 @@ export const App = () => {
                 </footer>
             </div>
             <div className="basis-2/5 w-full overflow-y-auto overflow-x-hidden max-h-full">
-                <div className="mt-16 pr-8 w-[120%]">
-                    {pdfArray.length > 0 ? (
-                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                        pdfArray.map(([_fileName, buffer], idx) =>
-                            idx === 0 ? (
-                                <PDFViewer
-                                    key={idx}
-                                    fileId={idx}
-                                    file={pdfBufferToBase64(buffer)}
-                                />
-                            ) : (
-                                <div key={idx} className="hidden">
-                                    <PDFViewer
-                                        key={idx}
-                                        fileId={idx}
-                                        file={pdfBufferToBase64(buffer)}
-                                    />
-                                </div>
-                            ),
-                        )
-                    ) : (
-                        <PDFViewer fileId={0} />
-                    )}
+                {/* sentry-block: never record the user's documents in Session Replay. */}
+                <div className="mt-16 pr-8 w-[120%] sentry-block">
+                    <PDFViewer fileId={0} file={preview} />
                 </div>
             </div>
         </div>

@@ -15,19 +15,24 @@ export default function PDFViewer({
     pagesToDisplay,
 }: {
     fileId: string | number
-    file?: ArrayBuffer | string
+    file?: Blob | string
     pagesToDisplay?: number
 }) {
     const componentRef = useRef<HTMLDivElement>(null)
-    const [numPages, setNumPages] = useState<number>(0)
+    // Page count of the file it was read from, so a new file never renders the previous count.
+    const [loaded, setLoaded] = useState<{ file: unknown; numPages: number }>({ file: null, numPages: 0 })
+    const numPages = loaded.file === file ? loaded.numPages : 0
     const [parentWidth, setParentWidth] = useState<number>(0)
 
     useLayoutEffect(() => {
         const currentRef = componentRef.current
-        if (currentRef) {
-            setParentWidth(currentRef.offsetWidth)
-        }
-    }, [componentRef])
+        if (!currentRef) return
+        setParentWidth(currentRef.offsetWidth)
+        // Follow window resizes and phone rotations.
+        const observer = new ResizeObserver(() => setParentWidth(currentRef.offsetWidth))
+        observer.observe(currentRef)
+        return () => observer.disconnect()
+    }, [])
 
     // if (!file) return 'Waiting'
     return (
@@ -43,7 +48,7 @@ export default function PDFViewer({
                     'sample.pdf'
                 }
                 onLoadSuccess={(e) => {
-                    setNumPages(e.numPages)
+                    setLoaded({ file, numPages: e.numPages })
                 }}
             >
                 {Array.from(
