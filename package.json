@@ -3,8 +3,8 @@
     "version": "0.1.0",
     "private": true,
     "scripts": {
-        "dev": "next dev",
-        "build": "next build",
+        "dev": "node scripts/copy-pdfjs-assets.mjs && next dev",
+        "build": "node scripts/copy-pdfjs-assets.mjs && next build",
         "start": "next start",
         "lint": "eslint .",
         "typecheck": "tsc --noEmit"
@@ -20,7 +20,6 @@
         "clsx": "^2.1.1",
         "crisp-sdk-web": "^1.2.1",
         "file-type": "^22.3.0",
-        "jschardet": "^4.1.0",
         "next": "16.4.6",
         "next-plausible": "^3.12.5",
         "pdf-lib": "^1.17.1",

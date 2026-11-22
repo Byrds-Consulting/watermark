@@ -4,7 +4,6 @@ import '@ungap/with-resolvers'
 
 import * as zip from '@zip.js/zip.js'
 import { fileTypeFromBuffer } from 'file-type'
-import jschardet from 'jschardet'
 import { captureException } from '@sentry/nextjs'
 
 import Image from 'next/image'
@@ -44,7 +43,8 @@ async function processFileBuffer(
     if (fileType === 'application/zip') {
         const blob = new Blob([new Uint8Array(buffer)], { type: fileType })
         const zipFileReader = new zip.BlobReader(blob)
-        const zipReader = new zip.ZipReader(zipFileReader)
+        // zip.js decodes names itself: UTF-8 flag, unflagged UTF-8 (macOS), CP437 otherwise, Unicode Path field.
+        const zipReader = new zip.ZipReader(zipFileReader, { strictness: 'tolerant' })
         for (const fileEntry of await zipReader.getEntries()) {
             if (!fileEntry || fileEntry.directory) continue
             const uintArrayWriter = new zip.Uint8ArrayWriter()
@@ -52,11 +52,8 @@ async function processFileBuffer(
             if (pdfFile) {
                 const typeInfo = await fileTypeFromBuffer(pdfFile)
                 if (typeInfo) {
-                    const detectedEncoding = jschardet.detect(Buffer.from(fileEntry.rawFilename))
-                    const decoder = new TextDecoder(detectedEncoding.encoding ?? 'utf-8')
-                    const decodedFilename = decoder.decode(fileEntry.rawFilename)
                     const [fileNames, pdfs] = await processFileBuffer(
-                        decodedFilename,
+                        fileEntry.filename,
                         typeInfo.mime,
                         pdfFile.buffer as ArrayBuffer,
                     )

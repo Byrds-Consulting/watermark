@@ -43,9 +43,6 @@ importers:
       file-type:
         specifier: ^22.3.0
         version: 22.3.0(supports-color@8.1.1)
-      jschardet:
-        specifier: ^4.1.0
-        version: 4.1.0
       next:
         specifier: 16.4.6
         version: 16.4.6(@babel/core@7.29.13(supports-color@8.1.1))(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -2148,11 +2145,6 @@ packages:
 
   js-yaml@4.3.2:
     resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
-    hasBin: true
-
-  jschardet@4.1.0:
-    resolution: {integrity: sha512-ighRZ11mb6l4m+xSKoivuqNj44qkObODXsAnnkkfYcY4JfYRnEgAe/w1c3mbnJtTQmLtfebAUfXGsUGUJImexg==}
-    engines: {node: '>=20'}
     hasBin: true
 
   jsesc@3.1.0:
@@ -5025,8 +5017,6 @@ snapshots:
   js-yaml@4.3.2:
     dependencies:
       argparse: 2.0.1
-
-  jschardet@4.1.0: {}
 
   jsesc@3.1.0: {}
 

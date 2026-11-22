@@ -6,7 +6,14 @@ const nextConfig: NextConfig = {
     // Pin the workspace root: a lockfile in a parent directory would otherwise be picked up
     // and nest the standalone server under .next/standalone/<path>/server.js.
     outputFileTracingRoot: __dirname,
-    turbopack: { root: __dirname },
+    turbopack: {
+        root: __dirname,
+        // Use the legacy pdf.js build: the modern one requires JS APIs that only the latest browsers ship.
+        resolveAlias: {
+            'pdfjs-dist': 'pdfjs-dist/legacy/build/pdf.mjs',
+            'pdfjs-dist/web/pdf_viewer.mjs': 'pdfjs-dist/legacy/web/pdf_viewer.mjs',
+        },
+    },
 }
 
 export default withSentryConfig(nextConfig, {
