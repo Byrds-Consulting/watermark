@@ -27,18 +27,25 @@ export type PageSize = { width: number; height: number }
 
 export function loadPdf(
     source: Uint8Array | string,
-    { enableXfa = false, worker }: { enableXfa?: boolean; worker?: pdfjs.PDFWorker } = {},
+    {
+        enableXfa = false,
+        disableFontFace = false,
+        worker,
+    }: { enableXfa?: boolean; disableFontFace?: boolean; worker?: pdfjs.PDFWorker } = {},
 ): PDFDocumentLoadingTask {
+    const options = { ...pdfjsOptions, enableXfa, disableFontFace, worker }
     return pdfjs.getDocument(
         typeof source === 'string'
-            ? { ...pdfjsOptions, enableXfa, worker, url: source }
+            ? { ...options, url: source }
             : // pdf.js transfers the buffer to its worker: give it a copy.
-              { ...pdfjsOptions, enableXfa, worker, data: source.slice() },
+              { ...options, data: source.slice() },
     )
 }
 
-// Upper bound for validating one file (malformed files can keep the pdf.js worker busy forever).
+// Upper bound for validating one file once the worker runs (malformed files can keep it busy forever).
 const VALIDATION_TIMEOUT_MS = 20_000
+// Time given to pdf.js to clean up a validated document before its worker is terminated.
+const CLEANUP_GRACE_MS = 2_000
 
 function withTimeout<T>(promise: Promise<T>, ms: number) {
     return new Promise<T>((resolve, reject) => {
@@ -69,14 +76,24 @@ export async function isReadablePdf(bytes: Uint8Array) {
     // A dedicated worker, terminated afterwards: tearing down a document can hang after some XFA
     // loading failures, and must never block the upload of the other files.
     const worker = new pdfjs.PDFWorker()
-    const task = loadPdf(bytes, { enableXfa: true, worker })
+    try {
+        // Not counted in the per-file deadline (slow network on the first download). A worker that
+        // cannot start is not the file's fault: the error propagates (upload failed, retry).
+        await worker.promise
+    } catch (error) {
+        worker.destroy()
+        throw error
+    }
+    // No fonts registered in the page: validation does not render anything.
+    const task = loadPdf(bytes, { enableXfa: true, disableFontFace: true, worker })
     try {
         const doc = await withTimeout(task.promise, VALIDATION_TIMEOUT_MS)
         return doc.numPages > 0 && !doc.isPureXfa
     } catch {
         return false
     } finally {
-        void task.destroy().catch(() => {})
+        // Let pdf.js clean up normally, but never wait forever for it.
+        await withTimeout(task.destroy(), CLEANUP_GRACE_MS).catch(() => {})
         worker.destroy()
     }
 }
