@@ -44,11 +44,16 @@ export async function getPageSizes(doc: PDFDocumentProxy): Promise<PageSize[]> {
     return sizes
 }
 
-/** Whether pdf.js can open the file and it has pages (rejects user-password-protected PDFs). */
+/**
+ * Whether the file can be rendered: pdf.js opens it (not protected by a user password, not corrupt),
+ * it has pages, and it is not a pure XFA form (whose filled content is not drawn on the canvas, only
+ * a "please wait" placeholder page).
+ */
 export async function isReadablePdf(bytes: Uint8Array) {
     const task = loadPdf(bytes)
     try {
-        return (await task.promise).numPages > 0
+        const doc = await task.promise
+        return doc.numPages > 0 && !doc.isPureXfa
     } catch {
         return false
     } finally {

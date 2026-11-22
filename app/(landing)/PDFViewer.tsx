@@ -19,6 +19,9 @@ export default function PDFViewer({ file, watermarkText }: { file?: Uint8Array; 
     const [failedSource, setFailedSource] = useState<Uint8Array | string | null>(null)
     const source = file ?? SAMPLE_URL
     const error = failedSource === source
+    // The source whose first page is on screen: anything else means the preview is loading.
+    const [renderedSource, setRenderedSource] = useState<Uint8Array | string | null>(null)
+    const loading = renderedSource !== source && !error
 
     useLayoutEffect(() => {
         const container = containerRef.current
@@ -32,6 +35,8 @@ export default function PDFViewer({ file, watermarkText }: { file?: Uint8Array; 
 
     useEffect(() => {
         let cancelled = false
+        // Never show the pages of the previous file while the new one loads.
+        containerRef.current?.replaceChildren()
         const task = loadPdf(source)
         task.promise
             .then(async (pdf) => {
@@ -56,10 +61,14 @@ export default function PDFViewer({ file, watermarkText }: { file?: Uint8Array; 
         let cancelled = false
         let overlayTask: ReturnType<typeof loadPdf> | undefined
         ;(async () => {
-            const overlay =
-                file && watermarkText !== undefined
-                    ? await (overlayTask = loadPdf(await createWatermarkOverlay(doc.sizes, watermarkText))).promise
-                    : null
+            let overlay = null
+            if (file && watermarkText !== undefined) {
+                const overlayBytes = await createWatermarkOverlay(doc.sizes, watermarkText)
+                if (cancelled) return
+                // Assigned before awaiting, so that the cleanup destroys it (and its worker port).
+                overlayTask = loadPdf(overlayBytes)
+                overlay = await overlayTask.promise
+            }
             if (cancelled) return
             const scale = (width * (window.devicePixelRatio || 1)) / Math.max(...doc.sizes.map((s) => s.width))
             for (let pageNumber = 1; pageNumber <= doc.pdf.numPages; pageNumber++) {
@@ -75,6 +84,7 @@ export default function PDFViewer({ file, watermarkText }: { file?: Uint8Array; 
                 const previous = container.children[pageNumber - 1]
                 if (previous) container.replaceChild(canvas, previous)
                 else container.appendChild(canvas)
+                if (pageNumber === 1) setRenderedSource(source)
             }
             while (container.children.length > doc.pdf.numPages) container.lastChild!.remove()
         })().catch(() => {
@@ -91,6 +101,7 @@ export default function PDFViewer({ file, watermarkText }: { file?: Uint8Array; 
     return (
         <div className="PDFViewer w-full select-none pointer-events-none">
             {error ? <p className="text-sm text-center opacity-60">Aperçu indisponible pour ce fichier.</p> : null}
+            {loading ? <p className="text-sm text-center opacity-60">Chargement de l’aperçu…</p> : null}
             <div ref={containerRef} />
         </div>
     )

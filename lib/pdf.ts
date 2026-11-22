@@ -1,12 +1,4 @@
-import {
-    degrees,
-    layoutMultilineText,
-    PDFDocument,
-    type PDFPageDrawTextOptions,
-    rgb,
-    StandardFonts,
-    TextAlignment,
-} from 'pdf-lib'
+import { degrees, PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 
 const cos45 = 0.70710678119
 const sin45 = 0.70710678119
@@ -24,7 +16,11 @@ function getWatermarkCharset() {
 /** Characters of `text` that cannot be drawn in the watermark (emoji, most non-Latin scripts, …). */
 export async function getUnsupportedWatermarkChars(text: string) {
     const charset = await getWatermarkCharset()
-    return [...new Set(Array.from(text).filter((char) => char !== '\n' && !charset.has(char.codePointAt(0)!)))]
+    return [
+        ...new Set(
+            Array.from(text).filter((char) => char !== '\n' && !charset.has(char.codePointAt(0)!)),
+        ),
+    ]
 }
 
 /**
@@ -32,72 +28,68 @@ export async function getUnsupportedWatermarkChars(text: string) {
  * document's pages, in points). It is rendered over each page by lib/render.ts, for the preview and
  * for the export alike.
  */
-export async function createWatermarkOverlay(sizes: { width: number; height: number }[], text = '') {
-    // Drop what the font cannot encode instead of throwing (the UI blocks the download meanwhile).
+export async function createWatermarkOverlay(
+    sizes: { width: number; height: number }[],
+    text = '',
+) {
+    // Drop what the font cannot encode instead of throwing (the UI blocks the download meanwhile),
+    // and the blank lines/spaces around the text, which would only push it off the page.
     const unsupported = new Set(await getUnsupportedWatermarkChars(text))
-    text = Array.from(text.replace(/\r\n?/g, '\n'))
+    const lines = Array.from(text.replace(/\r\n?/g, '\n'))
         .filter((char) => !unsupported.has(char))
         .join('')
-    while (text.length < 10) {
-        text = ` ${text} `
-    }
+        .split('\n')
+        .map((line) => line.trim())
+    while (lines.length > 1 && !lines[0]) lines.shift()
+    while (lines.length > 1 && !lines[lines.length - 1]) lines.pop()
 
     const pdfDoc = await PDFDocument.create()
-    const helveticaFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
-    const textLines = text.split('\n')
-    const textMaxLength = textLines.reduce((res, str) => Math.max(res, str.length), 0)
+    const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+    // Short texts are drawn as if they had 10 characters, so they do not become huge.
+    const maxChars = Math.max(10, ...lines.map((line) => line.length))
     // Width of the longest line at font size 1, measured with the actual glyphs.
-    const textMaxWidth = textLines.reduce(
-        (res, str) => Math.max(res, helveticaFont.widthOfTextAtSize(str, 1)),
-        0,
-    )
+    const maxWidth1 = Math.max(0.01, ...lines.map((line) => font.widthOfTextAtSize(line, 1)))
+
+    // Along the text (45° down-right) and perpendicular to it (the text's "up").
+    const along = { x: cos45, y: -sin45 }
+    const up = { x: sin45, y: cos45 }
 
     for (const { width, height } of sizes) {
         const page = pdfDoc.addPage([width, height])
         const shortSide = Math.min(width, height)
-        // Character-based size (the historical look), capped so that the longest line, drawn at 45°,
-        // fits within the page in both directions (landscape pages, wide glyphs like "W").
+        // Historical character-based size, capped so that the whole block (longest line × all
+        // lines), rotated by 45°, fits within the page: its projection on each axis is
+        // (blockWidth + blockHeight) · cos45.
         const size = Math.min(
-            (1.1 * (2 * shortSide)) / textMaxLength,
-            (0.95 * shortSide) / (Math.max(textMaxWidth, 0.01) * cos45),
+            (1.1 * (2 * shortSide)) / maxChars,
+            (0.95 * shortSide) / ((maxWidth1 + lines.length) * cos45),
         )
-        const multiText = layoutMultilineText(text, {
-            alignment: TextAlignment.Center,
-            font: helveticaFont,
-            fontSize: size,
-            bounds: { x: 0, y: 0, width: 100000, height: 100000 },
-        })
-        const maxMultilineWidth = multiText.lines.reduce((res, str) => Math.max(res, str.width), 0)
-
-        const textOptions: PDFPageDrawTextOptions & {
-            x: number
-            y: number
-            size: number
-            lineHeight: number
-        } = {
-            x: (width - (maxMultilineWidth + size) * cos45) / 2,
-            y: height / 2,
-            size,
-            font: helveticaFont,
-            lineHeight: size,
-            color: rgb(1, 0, 0),
-            opacity: 0.25,
-            wordBreaks: [' '],
-            rotate: degrees(-45),
-        }
-        const optimalLines = 5
-        const lines = Math.max(optimalLines, Math.ceil((optimalLines * height) / width))
-        for (const n of Array(lines).keys()) {
-            for (let i = 0; i < multiText.lines.length; i++) {
-                // Centered line by line
-                const xOffset = Math.abs(maxMultilineWidth - multiText.lines[i].width) / 2
-                page.drawText(`${multiText.lines[i].text}`, {
-                    ...textOptions,
-                    x: textOptions.x + xOffset * cos45,
-                    y:
-                        textOptions.y -
-                        (xOffset + 2 * i * textOptions.lineHeight) * sin45 -
-                        ((n - lines / 2) * height) / (lines - 3),
+        const blockHeight = lines.length * size
+        // Copies are tiled (staggered rows) along both directions, starting from one centred on the
+        // page, which is therefore always complete, until the whole page is covered.
+        const rowSpacing = Math.max(blockHeight + 0.6 * size, 0.2 * Math.max(width, height) * cos45)
+        const columnSpacing = maxWidth1 * size + 1.5 * size
+        const halfDiagonal = Math.hypot(width, height) / 2
+        const rows = Math.ceil(halfDiagonal / rowSpacing) + 1
+        const columns = Math.ceil(halfDiagonal / columnSpacing) + 1
+        for (let k = -rows; k <= rows; k++) {
+            for (let j = -columns; j <= columns; j++) {
+                const shift = (j + (Math.abs(k) % 2) / 2) * columnSpacing
+                const centerX = width / 2 + k * rowSpacing * up.x + shift * along.x
+                const centerY = height / 2 + k * rowSpacing * up.y + shift * along.y
+                lines.forEach((line, i) => {
+                    const lineWidth = font.widthOfTextAtSize(line, size)
+                    // Baseline of line i, from the top of the block (descent ignored, ~0.2 em).
+                    const offsetUp = blockHeight / 2 - (i + 1) * size + 0.2 * size
+                    page.drawText(line, {
+                        x: centerX - (lineWidth / 2) * along.x + offsetUp * up.x,
+                        y: centerY - (lineWidth / 2) * along.y + offsetUp * up.y,
+                        size,
+                        font,
+                        color: rgb(1, 0, 0),
+                        opacity: 0.25,
+                        rotate: degrees(-45),
+                    })
                 })
             }
         }

@@ -96,7 +96,7 @@ export const App = () => {
                 if (readable.length === 0) errors.push('Aucun fichier PDF, JPEG ou PNG exploitable n’a été trouvé.')
                 if (rejected.length > 0) errors.push(`Fichiers ignorés (format non supporté ou illisible) : ${formatList(rejected)}`)
                 if (unreadable.length > 0)
-                    errors.push(`PDF ignorés (protégés par mot de passe ou endommagés) : ${formatList(unreadable)}`)
+                    errors.push(`PDF ignorés (protégés par mot de passe, formulaires XFA ou endommagés) : ${formatList(unreadable)}`)
                 setUploadError(errors.length > 0 ? errors.join(' ') : null)
             } catch (error) {
                 if (id !== uploadId.current) return
