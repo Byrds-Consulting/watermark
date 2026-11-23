@@ -40,7 +40,7 @@ export function FileDropzone({ onFile, className }: { onFile: (files: File[]) =>
     return (
         <div
             className={cn(
-                'relative flex rounded-2xl border-[1.5px] border-dashed border-input bg-inset text-center transition-colors hover:border-brand',
+                'relative flex rounded-2xl border-[1.5px] border-dashed border-control-border bg-inset text-center transition-colors hover:border-brand',
                 { 'border-brand bg-highlight/40 dark:bg-muted': dragOver },
                 className,
             )}

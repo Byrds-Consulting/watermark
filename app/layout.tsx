@@ -9,7 +9,8 @@ const fontDisplay = Space_Grotesk({ subsets: ['latin'], weight: ['500', '700'], 
 
 // Applies the saved theme, or the system one, before the first paint (no flash of the wrong theme).
 // Kept in sync with components/theme/ThemeToggle.tsx.
-const themeScript = `try{var t=localStorage.getItem('theme');if(t!=='light'&&t!=='dark')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.classList.toggle('dark',t==='dark')}catch(e){}`
+// Storage can be blocked (privacy settings): the system theme still applies then.
+const themeScript = `(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(t!=='light'&&t!=='dark')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.classList.toggle('dark',t==='dark')})()`
 
 const CrispChat = dynamic(() => import('@/components/crisp/CrispChat'))
 export default function RootLayout({

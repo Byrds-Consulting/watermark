@@ -216,7 +216,7 @@ export const App = () => {
             >
                 <FileDropzone onFile={onDrop} className="grow" />
                 {dossier && dossier.files.length > 0 ? (
-                    <p className="-mt-2 text-center text-sm text-muted-foreground" aria-live="polite">
+                    <p className="-mt-2 text-center text-sm wrap-anywhere text-muted-foreground" aria-live="polite">
                         {dossier.archiveName ?? 'Dossier'} · {exportableFiles.length}{' '}
                         {exportableFiles.length > 1 ? 'fichiers' : 'fichier'}
                     </p>
@@ -235,7 +235,7 @@ export const App = () => {
                         })}
                     ></textarea>
                 </div>
-                <div className="space-y-2 text-center text-sm text-destructive empty:hidden" role="alert">
+                <div className="space-y-2 text-center text-sm wrap-anywhere text-destructive empty:hidden" role="alert">
                     {watermarkText.trim().length === 0 ? <p>Saisissez le texte du filigrane.</p> : null}
                     {watermarkLineCount > MAX_WATERMARK_LINES ? (
                         <p>Le filigrane est limité à {MAX_WATERMARK_LINES} lignes.</p>
@@ -254,8 +254,12 @@ export const App = () => {
                     ) : null}
                     {currentDownloadError ? <p>{currentDownloadError}</p> : null}
                 </div>
-                <Button disabled={!isReady} type="submit" className="h-13 rounded-xl text-base font-semibold">
-                    <ArrowDownTrayIcon aria-hidden className="mr-2 size-5" />
+                <Button
+                    disabled={!isReady}
+                    type="submit"
+                    className="h-auto min-h-13 rounded-xl py-3 text-base font-semibold whitespace-normal"
+                >
+                    <ArrowDownTrayIcon aria-hidden className="mr-2 size-5 shrink-0" />
                     {isDownloading
                         ? 'Préparation du dossier…'
                         : isUploading
@@ -263,9 +267,12 @@ export const App = () => {
                           : 'Télécharger le dossier protégé'}
                 </Button>
             </form>
+            {/* Focusable so that keyboard users can scroll through the pages. */}
             <div
+                role="region"
                 aria-label="Aperçu"
-                className="max-h-[80vh] min-w-0 overflow-y-auto rounded-3xl border bg-muted px-5 py-3 sm:px-8 md:max-h-[720px] dark:bg-card"
+                tabIndex={0}
+                className="focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring max-h-[80vh] min-w-0 overflow-y-auto rounded-3xl border bg-muted px-5 py-3 sm:px-8 md:max-h-[720px] dark:bg-card"
             >
                 {/* sentry-block: never record the user's documents in Session Replay. */}
                 <div className="sentry-block">

@@ -5,9 +5,14 @@ import { MoonIcon, SunIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/utils'
 
 const STORAGE_KEY = 'theme'
+type Theme = 'light' | 'dark'
 const systemDark = () => window.matchMedia('(prefers-color-scheme: dark)')
 
-function savedTheme() {
+// The choice made on this page, kept even when it cannot be saved (blocked storage).
+let chosenTheme: Theme | null = null
+
+function savedTheme(): Theme | null {
+    if (chosenTheme) return chosenTheme
     try {
         const theme = localStorage.getItem(STORAGE_KEY)
         return theme === 'light' || theme === 'dark' ? theme : null
@@ -16,7 +21,7 @@ function savedTheme() {
     }
 }
 
-function applyTheme(theme: 'light' | 'dark') {
+function applyTheme(theme: Theme) {
     document.documentElement.classList.toggle('dark', theme === 'dark')
 }
 
@@ -40,12 +45,14 @@ export function ThemeToggle({ className }: { className?: string }) {
         const onChange = () => {
             if (savedTheme() === null) applyTheme(media.matches ? 'dark' : 'light')
         }
+        onChange()
         media.addEventListener('change', onChange)
         return () => media.removeEventListener('change', onChange)
     }, [])
 
     const toggle = useCallback(() => {
-        const next = isDarkSnapshot() ? 'light' : 'dark'
+        const next: Theme = isDarkSnapshot() ? 'light' : 'dark'
+        chosenTheme = next
         applyTheme(next)
         try {
             localStorage.setItem(STORAGE_KEY, next)

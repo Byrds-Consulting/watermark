@@ -39,6 +39,8 @@
   /* Inset surfaces: the drop zone and the preview tray. */
   --color-inset: var(--inset);
 
+  /* Outline of controls such as the drop zone: at least 3:1 against the cards. */
+  --color-control-border: var(--control-border);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -65,6 +67,7 @@
         --highlight: #d4f7c8;
         --inset: #f5fbf2;
         --border: #e4eae1;
+        --control-border: #7f907a;
         --input: #d5ded1;
         --ring: #146b0a;
         --radius: 0.75rem;
@@ -86,6 +89,7 @@
         --highlight: transparent;
         --inset: #0f150e;
         --border: #222c20;
+        --control-border: #62755b;
         --input: #2f3b2c;
         --ring: #7deb66;
     }
