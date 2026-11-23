@@ -1,62 +1,110 @@
 'use client'
 
-import React, { useLayoutEffect, useRef, useState } from 'react'
-import { Document, Page, pdfjs } from 'react-pdf'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { PDFDocumentProxy } from 'pdfjs-dist'
+import { createWatermarkOverlay } from '@/lib/pdf'
+import { getPageSizes, loadPdf, renderPage, type PageSize } from '@/lib/render'
 
-import 'react-pdf/dist/esm/Page/AnnotationLayer.css'
-import 'react-pdf/dist/esm/Page/TextLayer.css'
-import './PDFViewer.css'
+const SAMPLE_URL = '/sample.pdf'
 
-// pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdf.worker.min.mjs', import.meta.url).toString()
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
-
-export default function PDFViewer({
-    file,
-    fileId,
-    pagesToDisplay,
-}: {
-    fileId: string | number
-    file?: ArrayBuffer | string
-    pagesToDisplay?: number
-}) {
-    const componentRef = useRef<HTMLDivElement>(null)
-    const [numPages, setNumPages] = useState<number>(0)
-    const [parentWidth, setParentWidth] = useState<number>(0)
+/**
+ * Preview of a PDF with its watermark, rendered by the same code as the export (lib/render.ts).
+ * Without `file`, shows the sample document as it is.
+ */
+export default function PDFViewer({ file, watermarkText }: { file?: Uint8Array; watermarkText?: string }) {
+    const containerRef = useRef<HTMLDivElement>(null)
+    const [width, setWidth] = useState(0)
+    const [doc, setDoc] = useState<{ pdf: PDFDocumentProxy; sizes: PageSize[] } | null>(null)
+    // The source that failed to render, so that the error disappears with the next file.
+    const [failedSource, setFailedSource] = useState<Uint8Array | string | null>(null)
+    const source = file ?? SAMPLE_URL
+    const error = failedSource === source
+    // The loaded document whose first page is on screen (one object per load, so that reloading the
+    // same source, e.g. the sample, shows the loading state again).
+    const [renderedDoc, setRenderedDoc] = useState<object | null>(null)
 
     useLayoutEffect(() => {
-        const currentRef = componentRef.current
-        if (currentRef) {
-            setParentWidth(currentRef.offsetWidth)
-        }
-    }, [componentRef])
+        const container = containerRef.current
+        if (!container) return
+        setWidth(container.offsetWidth)
+        // Follow window resizes and phone rotations.
+        const observer = new ResizeObserver(() => setWidth(container.offsetWidth))
+        observer.observe(container)
+        return () => observer.disconnect()
+    }, [])
 
-    // if (!file) return 'Waiting'
+    useEffect(() => {
+        let cancelled = false
+        // Never show the pages of the previous file while the new one loads.
+        containerRef.current?.replaceChildren()
+        const task = loadPdf(source)
+        task.promise
+            .then(async (pdf) => {
+                const sizes = await getPageSizes(pdf)
+                if (!cancelled) setDoc({ pdf, sizes })
+            })
+            .catch(() => {
+                if (cancelled) return
+                containerRef.current?.replaceChildren()
+                setFailedSource(source)
+            })
+        return () => {
+            cancelled = true
+            setDoc(null)
+            task.destroy()
+        }
+    }, [source])
+
+    useEffect(() => {
+        const container = containerRef.current
+        if (!doc || !container || width === 0) return
+        let cancelled = false
+        let overlayTask: ReturnType<typeof loadPdf> | undefined
+        ;(async () => {
+            let overlay = null
+            if (file && watermarkText !== undefined) {
+                const overlayBytes = await createWatermarkOverlay(doc.sizes, watermarkText)
+                if (cancelled) return
+                // Assigned before awaiting, so that the cleanup destroys it (and its worker port).
+                overlayTask = loadPdf(overlayBytes)
+                overlay = await overlayTask.promise
+            }
+            if (cancelled) return
+            const scale = (width * (window.devicePixelRatio || 1)) / Math.max(...doc.sizes.map((s) => s.width))
+            for (let pageNumber = 1; pageNumber <= doc.pdf.numPages; pageNumber++) {
+                const canvas = await renderPage(
+                    await doc.pdf.getPage(pageNumber),
+                    overlay ? await overlay.getPage(pageNumber) : null,
+                    scale,
+                )
+                if (cancelled) return
+                canvas.className = 'my-4 w-full h-auto rounded-(--radius) shadow-md'
+                canvas.setAttribute('aria-hidden', 'true')
+                // Replace page by page: the previous rendering stays visible until the new one is ready.
+                const previous = container.children[pageNumber - 1]
+                if (previous) container.replaceChild(canvas, previous)
+                else container.appendChild(canvas)
+                if (pageNumber === 1) setRenderedDoc(doc)
+            }
+            while (container.children.length > doc.pdf.numPages) container.lastChild!.remove()
+        })().catch(() => {
+            if (cancelled) return
+            container.replaceChildren()
+            setFailedSource(source)
+        })
+        return () => {
+            cancelled = true
+            overlayTask?.destroy()
+        }
+    }, [doc, file, source, watermarkText, width])
+
+    const loading = !error && (doc === null || renderedDoc !== doc)
+
     return (
-        <div className="PDFViewer w-full" ref={componentRef}>
-            <Document
-                className={`pdf_${fileId}`}
-                file={
-                    file ??
-                    // 'https://raw.githubusercontent.com/wojtekmaj/react-pdf/5bcddeb2255712c4f261104f0d62d51005039e25/sample/next-app/public/sample.pdf' ??
-                    'sample.pdf'
-                }
-                onLoadSuccess={(e) => {
-                    setNumPages(e._pdfInfo.numPages)
-                }}
-            >
-                {Array.from(
-                    new Array(
-                        pagesToDisplay ? Math.min(pagesToDisplay, numPages) : Math.max(1, numPages),
-                    ),
-                    (_el, index) => (
-                        <Page
-                            key={`page_${index + 1}`}
-                            pageNumber={index + 1}
-                            width={parentWidth}
-                        />
-                    ),
-                )}
-            </Document>
+        <div className="PDFViewer w-full select-none pointer-events-none">
+            {error ? <p className="text-sm text-center opacity-60">Aperçu indisponible pour ce fichier.</p> : null}
+            {loading ? <p className="text-sm text-center opacity-60">Chargement de l’aperçu…</p> : null}
+            <div ref={containerRef} />
         </div>
     )
 }

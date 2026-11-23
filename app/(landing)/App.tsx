@@ -3,18 +3,17 @@
 import '@ungap/with-resolvers'
 
 import * as zip from '@zip.js/zip.js'
-import { fileTypeFromBuffer } from 'file-type'
-import jschardet from 'jschardet'
-import { captureException } from '@sentry/browser'
+import { captureException } from '@sentry/nextjs'
 
 import Image from 'next/image'
 import { useForm } from 'react-hook-form'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePlausible } from 'next-plausible'
 
-import { PDFDocument } from 'pdf-lib'
 import { FileDropzone } from '@/app/(landing)/FileDropzone'
-import { test_downloadByteArray, test_modifyPdf } from '@/lib/pdf'
+import { PreviewBoundary } from '@/app/(landing)/PreviewBoundary'
+import { downloadBlob, getUnsupportedWatermarkChars, MAX_WATERMARK_LINES } from '@/lib/pdf'
+import { isLimitError, processFiles, uniqueNames, type SourceFile } from '@/lib/files'
 import dynamic from 'next/dynamic'
 import { ArrowDownCircleIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
@@ -27,200 +26,201 @@ const PDFViewer = dynamic(() => import('./PDFViewer'), {
     ssr: false,
 })
 
-function pdfBufferToBase64(pdf: Uint8Array) {
-    const data = pdf.buffer.slice(pdf.byteOffset, pdf.byteLength + pdf.byteOffset)
-    const base64 = Buffer.from(data).toString('base64')
-    return `data:application/pdf;base64,${base64}`
-}
+/** The uploaded dossier. `id` changes on every upload, so stale async results can be detected. */
+type Dossier = { id: number; archiveName: string | null; files: SourceFile[] }
+/** Something that belongs to one dossier only, and must disappear when another one is uploaded. */
+type ForDossier<T> = { dossierId: number; value: T }
 
-async function processFileBuffer(
-    fileName: string,
-    fileType: string,
-    buffer: ArrayBuffer,
-): Promise<[string[], Uint8Array[]]> {
-    const fileNameArray: string[] = []
-    const pdfArray: Uint8Array[] = []
-    console.log('Processing file:', fileName)
-    if (fileType === 'application/zip') {
-        const blob = new Blob([new Uint8Array(buffer)], { type: fileType })
-        const zipFileReader = new zip.BlobReader(blob)
-        const zipReader = new zip.ZipReader(zipFileReader)
-        for (const fileEntry of await zipReader.getEntries()) {
-            if (!fileEntry || fileEntry.directory) continue
-            const uintArrayWriter = new zip.Uint8ArrayWriter()
-            const pdfFile = await fileEntry.getData?.(uintArrayWriter)
-            if (pdfFile) {
-                const typeInfo = await fileTypeFromBuffer(pdfFile)
-                if (typeInfo) {
-                    const detectedEncoding = jschardet.detect(Buffer.from(fileEntry.rawFilename))
-                    const decoder = new TextDecoder(detectedEncoding.encoding ?? 'utf-8')
-                    const decodedFilename = decoder.decode(fileEntry.rawFilename)
-                    const [fileNames, pdfs] = await processFileBuffer(
-                        decodedFilename,
-                        typeInfo.mime,
-                        pdfFile.buffer as ArrayBuffer,
-                    )
-                    fileNameArray.push(...fileNames)
-                    pdfArray.push(...pdfs)
-                } else {
-                    console.log(`Ignoring: Unknown file type for "${fileEntry.filename}"`)
-                }
-            }
-        }
-        await zipReader.close()
-    } else if (fileType === 'application/pdf') {
-        fileNameArray.push(fileName)
-        pdfArray.push(new Uint8Array(buffer))
-    } else if (fileType === 'image/jpeg' || fileType === 'image/png') {
-        const pdfDoc = await PDFDocument.create()
-        const image =
-            fileType === 'image/png' ? await pdfDoc.embedPng(buffer) : await pdfDoc.embedJpg(buffer)
-        const imgDims = image.size()
-        const page = pdfDoc.addPage([imgDims.width, imgDims.height])
-        // const imgDims = image.scaleToFit(page.getWidth(), page.getHeight())
-        page.drawImage(image, {
-            x: page.getWidth() / 2 - imgDims.width / 2,
-            y: page.getHeight() / 2 - imgDims.height / 2,
-            width: imgDims.width,
-            height: imgDims.height,
-        })
-        const pdfBytes = await pdfDoc.save()
-        fileNameArray.push(fileName.replace(/\.(jpg|jpeg|png)$/i, '.pdf'))
-        pdfArray.push(pdfBytes)
-    } else {
-        console.log(`Ignoring: Unknown file type for "${fileName}" (${fileType})`)
-    }
-    return [fileNameArray, pdfArray]
-}
-
-async function processAllFiles(
-    files: File[],
-    watermarkText: string,
-): Promise<[string | null, string[], Uint8Array[]]> {
-    const fileNameArray: string[] = []
-    const pdfArray: Uint8Array[] = []
-    for (const file of files) {
-        const reader = new FileReader()
-        reader.readAsArrayBuffer(file)
-        const [fileNames, pdfs] = await new Promise<Awaited<ReturnType<typeof processFileBuffer>>>(
-            (resolve) => {
-                reader.onload = async (event) => {
-                    const buffer = event.target?.result
-                    if (buffer instanceof ArrayBuffer) {
-                        return resolve(processFileBuffer(file.name, file.type, buffer))
-                    }
-                    return resolve([[], []])
-                }
-            },
-        )
-        fileNameArray.push(...fileNames)
-        pdfArray.push(...pdfs)
-    }
-    if (files.length === 1 && files[0].type === 'application/zip') {
-        return [files[0].name, fileNameArray, pdfArray]
-    }
-    return [null, fileNameArray, pdfArray]
+function formatList(names: string[]) {
+    return names.map((name) => `« ${name} »`).join(', ')
 }
 
 export const App = () => {
-    const [originalFileName, setOriginalFileName] = useState<string | null>(null)
-    const [OriginalPDFArray, setOriginalPDFArray] = useState<Array<[string, Uint8Array]>>([])
-    const [pdfArray, setPDFArray] = useState<Array<[string, Uint8Array]>>([])
-    const { register, handleSubmit, watch } = useForm()
-    const watermarkTextValue = watch('watermark')
+    const [dossier, setDossier] = useState<Dossier | null>(null)
+    const [uploadError, setUploadError] = useState<string | null>(null)
+    // pdf.js could not start (e.g. network glitch): only a page reload recovers.
+    const [needsReload, setNeedsReload] = useState(false)
+    const [downloadError, setDownloadError] = useState<ForDossier<string> | null>(null)
+    // Files whose export failed, excluded from the next download attempts of the same dossier.
+    const [excluded, setExcluded] = useState<ForDossier<string[]> | null>(null)
+    const [unsupportedChars, setUnsupportedChars] = useState<string[]>([])
+    const [isUploading, setIsUploading] = useState(false)
+    const [isDownloading, setIsDownloading] = useState(false)
+    const uploadId = useRef(0)
+    const { register, handleSubmit, watch } = useForm<{ watermark: string }>()
+    const watermarkTextValue = watch('watermark') ?? ''
     const watermarkText = useDebounce<string>(watermarkTextValue, 200)
     const plausible = usePlausible()
 
-    const isReady = pdfArray.length > 0
+    const excludedNames = useMemo(
+        () => (dossier && excluded?.dossierId === dossier.id ? excluded.value : []),
+        [dossier, excluded],
+    )
+    const exportableFiles = useMemo(
+        () => (dossier ? dossier.files.filter((file) => !excludedNames.includes(file.name)) : []),
+        [dossier, excludedNames],
+    )
+    const watermarkLineCount = watermarkText.trim().split(/\r\n?|\n/).length
+    const hasWatermark =
+        watermarkText.trim().length > 0 &&
+        unsupportedChars.length === 0 &&
+        watermarkLineCount <= MAX_WATERMARK_LINES
+    const isReady =
+        exportableFiles.length > 0 &&
+        hasWatermark &&
+        watermarkText === watermarkTextValue &&
+        !isUploading &&
+        !isDownloading
 
     const onDrop = useCallback(
         async (acceptedFiles: File[]) => {
+            if (acceptedFiles.length === 0) return
             plausible('File upload')
+            const id = ++uploadId.current
+            setIsUploading(true)
+            setUploadError(null)
             try {
-                const [originalFileName, fileNames, pdfs] = await processAllFiles(
-                    acceptedFiles,
-                    watermarkText,
-                )
-                if (pdfs.length > 0) {
-                    setOriginalFileName(originalFileName)
-                    setOriginalPDFArray(fileNames.map((fileName, idx) => [fileName, pdfs[idx]]))
-                    // setReady(true)
+                const { files, rejected, archives } = await processFiles(acceptedFiles)
+                // Keep only the PDFs that pdf.js (the preview and export renderer) can open.
+                const { isReadablePdf } = await import('@/lib/render')
+                setNeedsReload(false)
+                const readable: SourceFile[] = []
+                const unreadable: string[] = []
+                for (const file of files) {
+                    if (await isReadablePdf(file.bytes)) readable.push(file)
+                    else unreadable.push(file.name)
                 }
+                if (id !== uploadId.current) return // a newer upload superseded this one
+                const names = uniqueNames(readable.map((file) => file.name))
+                // A single selected archive is downloaded back as an archive, under its name.
+                const archiveName =
+                    acceptedFiles.length === 1 && archives.length === 1
+                        ? archives[0].replace(/(\.zip)?$/i, '.zip')
+                        : null
+                // Replace the previous dossier even when nothing usable was found: never keep
+                // offering a download of files the user meant to replace.
+                setDossier({ id, archiveName, files: readable.map((file, idx) => ({ ...file, name: names[idx] })) })
+                const errors: string[] = []
+                if (readable.length === 0) errors.push('Aucun fichier PDF, JPEG ou PNG exploitable n’a été trouvé.')
+                if (rejected.length > 0) errors.push(`Fichiers ignorés (format non supporté ou illisible) : ${formatList(rejected)}`)
+                if (unreadable.length > 0)
+                    errors.push(`PDF ignorés (protégés par mot de passe, formulaires XFA ou endommagés) : ${formatList(unreadable)}`)
+                setUploadError(errors.length > 0 ? errors.join(' ') : null)
             } catch (error) {
-                console.error('Error processing files:', error)
-                captureException(error)
+                if (id !== uploadId.current) return
+                setDossier(null)
+                if (error instanceof Error && error.name === 'PdfWorkerStartError') {
+                    setNeedsReload(true)
+                    setUploadError('Le lecteur PDF n’a pas pu être chargé (connexion interrompue ?).')
+                    return
+                }
+                setUploadError(
+                    isLimitError(error)
+                        ? `${error.message} : importez moins de fichiers à la fois.`
+                        : 'Impossible de lire ces fichiers.',
+                )
+                if (!isLimitError(error)) captureException(error)
                 plausible('File upload error')
+            } finally {
+                if (id === uploadId.current) setIsUploading(false)
             }
         },
-        [plausible, watermarkText],
+        [plausible],
     )
 
     useEffect(() => {
-        ;(async () => {
-            setPDFArray(
-                await Promise.all(
-                    OriginalPDFArray.map(async ([fileName, buffer]) => [
-                        fileName,
-                        await test_modifyPdf(buffer.buffer as ArrayBuffer, watermarkText || ''),
-                    ]),
-                ),
-            )
-        })()
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [OriginalPDFArray, watermarkText])
+        let cancelled = false
+        getUnsupportedWatermarkChars(watermarkText).then((chars) => {
+            if (!cancelled) setUnsupportedChars(chars)
+        })
+        return () => {
+            cancelled = true
+        }
+    }, [watermarkText])
 
     const downloadPDF = useCallback(async () => {
+        if (!isReady || !dossier) return
+        // Export exactly this generation, whatever the user does while it runs.
+        const { id: dossierId, archiveName } = dossier
+        const text = watermarkText
+        const files = exportableFiles
+        const asZip = archiveName !== null || dossier.files.length > 1
         plausible('File download')
-
-        // PDF Creation
-        async function pdfFromCanvas(fileName: string, idx: number) {
-            const allPages = document.querySelectorAll<HTMLCanvasElement>(
-                `.pdf_${idx} .react-pdf__Page__canvas`,
-            )
-            console.warn(`[${idx}] PDF render:`, fileName, `(${allPages.length} pages`)
-            const pdfDoc = await PDFDocument.create()
-            for (const canvas of allPages) {
-                const base64 = canvas.toDataURL('image/jpeg', 0.25)
-                const page = pdfDoc.addPage([canvas.width, canvas.height])
-                const image = await pdfDoc.embedJpg(base64)
-                page.drawImage(image, {
-                    x: 0,
-                    y: 0, // 250
-                    width: page.getWidth(),
-                    height: page.getHeight(),
+        setIsDownloading(true)
+        setDownloadError(null)
+        try {
+            const { flattenPdf } = await import('@/lib/flatten')
+            const exported: SourceFile[] = []
+            const failures: string[] = []
+            for (const file of files) {
+                try {
+                    exported.push({ name: file.name, bytes: await flattenPdf(file.bytes, text) })
+                } catch (error) {
+                    captureException(error)
+                    failures.push(file.name)
+                }
+            }
+            if (failures.length > 0) {
+                // Never download an incomplete dossier silently: exclude the files and let the user retry.
+                plausible('File download error')
+                setExcluded((previous) => ({
+                    dossierId,
+                    value: [...(previous?.dossierId === dossierId ? previous.value : []), ...failures],
+                }))
+                setDownloadError({
+                    dossierId,
+                    value:
+                        `Impossible de convertir ${formatList(failures)}.` +
+                        (exported.length > 0 ? ' Cliquez à nouveau sur « Télécharger » pour obtenir le reste.' : ''),
                 })
+                return
             }
-            return await pdfDoc.save()
+            if (asZip) {
+                const zipWriter = new zip.ZipWriter(new zip.BlobWriter('application/zip'))
+                for (const file of exported) {
+                    await zipWriter.add(file.name, new zip.Uint8ArrayReader(file.bytes))
+                }
+                // Local date (toISOString() is UTC: the day before in the evening in France).
+                const now = new Date()
+                const today = [now.getFullYear(), now.getMonth() + 1, now.getDate()]
+                    .map((n) => String(n).padStart(2, '0'))
+                    .join('-')
+                downloadBlob(archiveName || `dossier_${today}.zip`, await zipWriter.close())
+            } else {
+                const [file] = exported
+                downloadBlob(
+                    file.name.split('/').pop()!,
+                    new Blob([file.bytes as BlobPart], { type: 'application/pdf' }),
+                )
+            }
+        } catch (error) {
+            captureException(error)
+            plausible('File download error')
+            setDownloadError({
+                dossierId,
+                value: 'La création du dossier a échoué. Réessayez ou importez moins de fichiers.',
+            })
+        } finally {
+            setIsDownloading(false)
         }
+    }, [isReady, dossier, watermarkText, exportableFiles, plausible])
 
-        if (originalFileName || pdfArray.length > 1) {
-            const zipWriter = new zip.ZipWriter(new zip.BlobWriter('application/zip'))
-            for (const [idx, [fileName]] of pdfArray.entries()) {
-                const pdfBytes = await pdfFromCanvas(fileName, idx)
-                await zipWriter.add(fileName, new zip.Uint8ArrayReader(pdfBytes))
-            }
-            const zipFileBlob = await zipWriter.close()
-            test_downloadByteArray(
-                originalFileName || `dossier_${intl.format(new Date())}.zip`,
-                zipFileBlob,
-            )
-        } else if (pdfArray.length > 0) {
-            const [fileName] = pdfArray[0]
-            const pdfBytes = await pdfFromCanvas(fileName, 0)
-            test_downloadByteArray(fileName, pdfBytes as BlobPart)
-        }
-    }, [originalFileName, pdfArray, plausible])
+    // Preview the first file that will be exported, with the watermark as currently typed.
+    const previewFile = exportableFiles[0]
+    const currentDownloadError =
+        dossier && downloadError?.dossierId === dossier.id ? downloadError.value : null
 
     return (
-        <div className="flex w-full gap-8 h-screen">
-            <div className="grow p-8 sm:p-20 pt-16">
+        // Side by side on wide screens (each column scrolls); stacked, page scrolling, on phones.
+        <div className="flex flex-col md:flex-row w-full gap-8 min-h-screen md:h-screen">
+            <div className="grow p-8 sm:p-20 pt-16 md:overflow-y-auto">
                 <main className="flex flex-col gap-8 items-center w-full min-h-full">
                     <div className="flex flex-col gap-8 items-center max-w-lg">
                         <h1 className="text-4xl font-bold">
                             {/* <Image
                                 priority
                                 aria-hidden
-                                className="inline align-baseline mx-2 top-[1px] relative"
+                                className="inline align-baseline mx-2 top-px relative"
                                 style={{ color: 'red' }}
                                 src="img/watermark-logo.svg"
                                 width={27}
@@ -255,7 +255,8 @@ export const App = () => {
                         <FileDropzone onFile={onDrop} />
                         <form className="w-full space-y-8" onSubmit={handleSubmit(downloadPDF)}>
                             <textarea
-                                className="flex min-h-[60px] w-full rounded-md border border-input bg-[#f6fff0] px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:cursor-not-allowed opacity-80 disabled:opacity-50 resize-none text-center"
+                                aria-label="Texte du filigrane"
+                                className="flex min-h-[60px] w-full rounded-md border border-input bg-[#f6fff0] px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:cursor-not-allowed opacity-80 disabled:opacity-50 resize-none text-center"
                                 placeholder="Éditez votre filigram"
                                 // placeholder={`Valide uniquement pour dossier de location&#10;le ${intl.format(
                                 //     new Date(),
@@ -267,15 +268,34 @@ export const App = () => {
                                     )}`,
                                 })}
                             ></textarea>
+                            <div className="space-y-2 text-center text-sm text-red-700" role="alert">
+                                {watermarkText.trim().length === 0 ? <p>Saisissez le texte du filigrane.</p> : null}
+                                {watermarkLineCount > MAX_WATERMARK_LINES ? (
+                                    <p>Le filigrane est limité à {MAX_WATERMARK_LINES} lignes.</p>
+                                ) : null}
+                                {unsupportedChars.length > 0 ? (
+                                    <p>Caractères non pris en charge dans le filigrane : {unsupportedChars.join(' ')}</p>
+                                ) : null}
+                                {uploadError ? <p>{uploadError}</p> : null}
+                                {needsReload ? (
+                                    <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+                                        Recharger la page
+                                    </Button>
+                                ) : null}
+                                {excludedNames.length > 0 ? (
+                                    <p>Fichiers retirés du dossier (conversion impossible) : {formatList(excludedNames)}</p>
+                                ) : null}
+                                {currentDownloadError ? <p>{currentDownloadError}</p> : null}
+                            </div>
                             <div className="flex justify-center">
-                                {isReady ? (
-                                    <Button
-                                        // onClick={downloadPDF}
-                                        disabled={!isReady}
-                                        type="submit"
-                                    >
+                                {dossier && dossier.files.length > 0 ? (
+                                    <Button disabled={!isReady} type="submit">
                                         <ArrowDownCircleIcon className="mx-auto mr-2 h-6 w-6" />
-                                        Télécharger le dossier
+                                        {isDownloading
+                                            ? 'Préparation du dossier…'
+                                            : isUploading
+                                              ? 'Lecture des fichiers…'
+                                              : 'Télécharger le dossier'}
                                     </Button>
                                 ) : null}
                             </div>
@@ -300,30 +320,12 @@ export const App = () => {
                     </p>
                 </footer>
             </div>
-            <div className="basis-2/5 w-full overflow-y-auto overflow-x-hidden max-h-full">
-                <div className="mt-16 pr-8 w-[120%]">
-                    {pdfArray.length > 0 ? (
-                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                        pdfArray.map(([_fileName, buffer], idx) =>
-                            idx === 0 ? (
-                                <PDFViewer
-                                    key={idx}
-                                    fileId={idx}
-                                    file={pdfBufferToBase64(buffer)}
-                                />
-                            ) : (
-                                <div key={idx} className="hidden">
-                                    <PDFViewer
-                                        key={idx}
-                                        fileId={idx}
-                                        file={pdfBufferToBase64(buffer)}
-                                    />
-                                </div>
-                            ),
-                        )
-                    ) : (
-                        <PDFViewer fileId={0} />
-                    )}
+            <div className="md:basis-2/5 w-full md:overflow-y-auto overflow-x-hidden md:max-h-full">
+                {/* sentry-block: never record the user's documents in Session Replay. */}
+                <div className="mt-16 pr-8 w-[120%] sentry-block">
+                    <PreviewBoundary>
+                        <PDFViewer file={previewFile?.bytes} watermarkText={previewFile ? watermarkText : undefined} />
+                    </PreviewBoundary>
                 </div>
             </div>
         </div>

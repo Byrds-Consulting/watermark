@@ -7,6 +7,10 @@ import * as Sentry from '@sentry/nextjs'
 Sentry.init({
     dsn: 'https://cf7ec7737801f3cbaa0aa33dea8c40fa@o4508247932010496.ingest.de.sentry.io/4508247933517904',
 
+    // Route browser requests to Sentry through the Next.js server (answered by
+    // `serveTunnelIntegration` in sentry.server.config.ts) to circumvent ad-blockers.
+    tunnel: true,
+
     // Add optional integrations for additional features
     integrations: [Sentry.replayIntegration()],
 
@@ -24,3 +28,5 @@ Sentry.init({
     // Setting this option to true will print useful information to the console while you're setting up Sentry.
     debug: false,
 })
+
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
