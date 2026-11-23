@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useCallback, useState } from 'react'
-import { DocumentArrowUpIcon } from '@heroicons/react/24/outline'
+import { ArrowUpTrayIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/utils'
 
-export function FileDropzone({ onFile }: { onFile: (files: File[]) => void }) {
+export function FileDropzone({ onFile, className }: { onFile: (files: File[]) => void; className?: string }) {
     const [dragOver, setDragOver] = useState(false)
 
     const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
@@ -38,42 +38,34 @@ export function FileDropzone({ onFile }: { onFile: (files: File[]) => void }) {
     )
 
     return (
-        <div className="w-full mx-auto">
-            <div
-                className={cn(
-                    'border border-dashed border-black/50 rounded-lg p-8 pb-0 text-center cursor-pointer hover:border-[#3CDC1E] bg-white/15 hover:bg-[#d7fbcc]/15 transition-colors',
-                    {
-                        'bg-[#d7fbcc]/15': dragOver,
-                        'border-[#3CDC1E]': dragOver,
-                    },
-                )}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
+        <div
+            className={cn(
+                'relative flex rounded-2xl border-[1.5px] border-dashed border-input bg-inset text-center transition-colors hover:border-brand',
+                { 'border-brand bg-highlight/40 dark:bg-muted': dragOver },
+                className,
+            )}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+        >
+            <input
+                type="file"
+                id="fileInput"
+                multiple
+                className="sr-only peer"
+                onChange={handleFileInput}
+                accept="image/jpeg,image/png,application/pdf,application/zip"
+            />
+            <label
+                htmlFor="fileInput"
+                className="flex min-h-48 w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl p-6 peer-focus-visible:ring-2 peer-focus-visible:ring-ring"
             >
-                <input
-                    type="file"
-                    id="fileInput"
-                    multiple
-                    // Visually hidden but focusable, so keyboard users can open the picker.
-                    className="sr-only peer"
-                    onChange={handleFileInput}
-                    // accept="*/*"
-                    // accept="image/jpeg,image/gif,image/png,application/pdf,image/x-eps"
-                    accept="image/jpeg,image/png,application/pdf,application/zip"
-                />
-                <label
-                    htmlFor="fileInput"
-                    className="block cursor-pointer rounded-md peer-focus-visible:ring-2 peer-focus-visible:ring-ring"
-                >
-                    <DocumentArrowUpIcon className="mx-auto mb-4 h-8 w-8" />
-                    <p className="mt-2 text-sm">Sélectionnez vos fichiers</p>
-                </label>
-
-                <p className="text-xs text-center opacity-50 py-4">
-                    Les fichiers PDF, Zip, JPEG et PNG sont supportés
-                </p>
-            </div>
+                <ArrowUpTrayIcon aria-hidden className="size-8 text-brand" />
+                <span className="text-base font-semibold">Déposez vos pièces justificatives</span>
+                <span className="text-sm text-muted-foreground">
+                    PDF, ZIP, JPEG ou PNG — plusieurs fichiers acceptés
+                </span>
+            </label>
         </div>
     )
 }

@@ -1,135 +1,100 @@
 @import 'tailwindcss';
 
-@custom-variant dark (&:is(.dark *));
+/* The theme is a `dark` class on <html>, set before the first paint by the script in app/layout.tsx. */
+@custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
+@theme inline {
+  /* Fonts loaded by next/font in app/layout.tsx. */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
 
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
 
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--card-foreground);
 
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
 
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-secondary: var(--muted);
+  --color-secondary-foreground: var(--foreground);
 
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
 
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-accent: var(--muted);
+  --color-accent-foreground: var(--foreground);
 
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
 
-  --color-chart-1: hsl(var(--chart-1));
-  --color-chart-2: hsl(var(--chart-2));
-  --color-chart-3: hsl(var(--chart-3));
-  --color-chart-4: hsl(var(--chart-4));
-  --color-chart-5: hsl(var(--chart-5));
+  /* Brand green dark enough to be read as text on the background (the primary green is not). */
+  --color-brand: var(--brand);
+  /* Highlight behind the emphasized part of the title. */
+  --color-highlight: var(--highlight);
+  /* Inset surfaces: the drop zone and the preview tray. */
+  --color-inset: var(--inset);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 }
 
-/*
-  The default border color has changed to `currentcolor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
-*/
-@layer base {
-  *,
-  ::after,
-  ::before,
-  ::backdrop,
-  ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
-  }
-}
-
 @layer base {
     :root {
-        --background: 0 0% 100%;
-        --foreground: 111 76% 10%; /* #3CDC1E */
-        --card: 0 0% 100%;
-        --card-foreground: 111 76% 10%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 111 76% 10%;
-        --primary: 111 76% 49%;
-        --primary-foreground: 0 0% 100%;
-        --secondary: 240 4.8% 95.9%;
-        --secondary-foreground: 240 5.9% 10%;
-        --muted: 240 4.8% 60%;
-        --muted-foreground: 111 20% 30%;
-        --accent: 240 4.8% 95.9%;
-        --accent-foreground: 240 5.9% 10%;
-        --destructive: 0 84.2% 60.2%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 240 5.9% 90%;
-        --input: 240 5.9% 90%;
-        --ring: 111 76% 49%;
-        --radius: 0.5rem;
+        color-scheme: light;
+        --background: #fbfcfa;
+        --foreground: #0f1a0c;
+        --card: #ffffff;
+        --card-foreground: #0f1a0c;
+        --primary: #3cdc1e;
+        --primary-foreground: #0f1a0c;
+        --muted: #eef3eb;
+        --muted-foreground: #4a5546;
+        --destructive: #b42318;
+        --destructive-foreground: #ffffff;
+        --brand: #146b0a;
+        --highlight: #d4f7c8;
+        --inset: #f5fbf2;
+        --border: #e4eae1;
+        --input: #d5ded1;
+        --ring: #146b0a;
+        --radius: 0.75rem;
     }
 
     .dark {
-        --background: 20 14.3% 4.1%;
-        --foreground: 0 0% 95%;
-        --card: 24 9.8% 10%;
-        --card-foreground: 0 0% 95%;
-        --popover: 0 0% 9%;
-        --popover-foreground: 0 0% 95%;
-        --primary: 142.1 70.6% 45.3%;
-        --primary-foreground: 144.9 80.4% 10%;
-        --secondary: 240 3.7% 15.9%;
-        --secondary-foreground: 0 0% 98%;
-        --muted: 0 0% 15%;
-        --muted-foreground: 240 5% 64.9%;
-        --accent: 12 6.5% 15.1%;
-        --accent-foreground: 0 0% 98%;
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 0 85.7% 97.3%;
-        --border: 240 3.7% 15.9%;
-        --input: 240 3.7% 15.9%;
-        --ring: 142.4 71.8% 29.2%;
+        color-scheme: dark;
+        --background: #0b0f0a;
+        --foreground: #e8ede6;
+        --card: #131a12;
+        --card-foreground: #e8ede6;
+        --primary: #3cdc1e;
+        --primary-foreground: #0b0f0a;
+        --muted: #1a2318;
+        --muted-foreground: #a3b09f;
+        --destructive: #f97066;
+        --destructive-foreground: #0b0f0a;
+        --brand: #7deb66;
+        --highlight: transparent;
+        --inset: #0f150e;
+        --border: #222c20;
+        --input: #2f3b2c;
+        --ring: #7deb66;
     }
-}
 
-@layer base {
     * {
         @apply border-border;
     }
+
     body {
-        @apply /* bg-background */ text-foreground;
-    }
-}
-
-@layer base {
-    :root {
-        --chart-1: 12 76% 61%;
-        --chart-2: 173 58% 39%;
-        --chart-3: 197 37% 24%;
-        --chart-4: 43 74% 66%;
-        --chart-5: 27 87% 67%;
-    }
-
-    .dark {
-        --chart-1: 220 70% 50%;
-        --chart-2: 160 60% 45%;
-        --chart-3: 30 80% 55%;
-        --chart-4: 280 65% 60%;
-        --chart-5: 340 75% 55%;
+        @apply bg-background text-foreground;
     }
 }
