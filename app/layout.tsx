@@ -1,10 +1,16 @@
 import type { Metadata } from 'next'
-import { Inter as FontSans } from 'next/font/google'
+import { Inter, Space_Grotesk } from 'next/font/google'
 import './globals.css'
 import Providers from '@/app/providers'
 import dynamic from 'next/dynamic'
 
-const fontSans = FontSans({ subsets: ['latin'], variable: '--font-sans' })
+const fontSans = Inter({ subsets: ['latin'], variable: '--font-inter' })
+const fontDisplay = Space_Grotesk({ subsets: ['latin'], weight: ['500', '700'], variable: '--font-space-grotesk' })
+
+// Applies the saved theme, or the system one, before the first paint (no flash of the wrong theme).
+// Kept in sync with components/theme/ThemeToggle.tsx.
+// Storage can be blocked (privacy settings): the system theme still applies then.
+const themeScript = `(function(){var t=null;try{t=localStorage.getItem('theme')}catch(e){}if(t!=='light'&&t!=='dark')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.classList.toggle('dark',t==='dark')})()`
 
 const CrispChat = dynamic(() => import('@/components/crisp/CrispChat'))
 export default function RootLayout({
@@ -13,8 +19,12 @@ export default function RootLayout({
     children: React.ReactNode
 }>) {
     return (
-        <html lang="fr">
-            <body className={`${fontSans.variable} antialiased`}>
+        // The script changes the class of <html> before React hydrates it.
+        <html lang="fr" className={`${fontSans.variable} ${fontDisplay.variable}`} suppressHydrationWarning>
+            <head>
+                <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+            </head>
+            <body className="font-sans antialiased">
                 <Providers>{children}</Providers>
                 <CrispChat lang="fr" />
             </body>
@@ -24,8 +34,8 @@ export default function RootLayout({
 
 export const viewport = {
     themeColor: [
-        { media: '(prefers-color-scheme: light)', color: '#3CDC1E' },
-        // { media: '(prefers-color-scheme: dark)', color: 'black' },
+        { media: '(prefers-color-scheme: light)', color: '#fbfcfa' },
+        { media: '(prefers-color-scheme: dark)', color: '#0b0f0a' },
     ],
 }
 

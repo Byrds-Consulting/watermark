@@ -5,7 +5,6 @@ import '@ungap/with-resolvers'
 import * as zip from '@zip.js/zip.js'
 import { captureException } from '@sentry/nextjs'
 
-import Image from 'next/image'
 import { useForm } from 'react-hook-form'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePlausible } from 'next-plausible'
@@ -15,9 +14,8 @@ import { PreviewBoundary } from '@/app/(landing)/PreviewBoundary'
 import { downloadBlob, getUnsupportedWatermarkChars, MAX_WATERMARK_LINES } from '@/lib/pdf'
 import { isLimitError, processFiles, uniqueNames, type SourceFile } from '@/lib/files'
 import dynamic from 'next/dynamic'
-import { ArrowDownCircleIcon } from '@heroicons/react/24/outline'
+import { ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
-import { DocumentTextIcon } from '@heroicons/react/24/outline'
 import { useDebounce } from '@uidotdev/usehooks'
 
 const intl = new Intl.DateTimeFormat('fr-FR')
@@ -211,123 +209,78 @@ export const App = () => {
         dossier && downloadError?.dossierId === dossier.id ? downloadError.value : null
 
     return (
-        // Side by side on wide screens (each column scrolls); stacked, page scrolling, on phones.
-        <div className="flex flex-col md:flex-row w-full gap-8 min-h-screen md:h-screen">
-            <div className="grow p-8 sm:p-20 pt-16 md:overflow-y-auto">
-                <main className="flex flex-col gap-8 items-center w-full min-h-full">
-                    <div className="flex flex-col gap-8 items-center max-w-lg">
-                        <h1 className="text-4xl font-bold">
-                            {/* <Image
-                                priority
-                                aria-hidden
-                                className="inline align-baseline mx-2 top-px relative"
-                                style={{ color: 'red' }}
-                                src="img/watermark-logo.svg"
-                                width={27}
-                                height={27}
-                                alt="Header image"
-                            /> */}
-                            <DocumentTextIcon className="inline align-baseline mx-2 top-[2px] relative w-[30px]" />
-                            Dossier PDF sécurisé
-                        </h1>
-                        <div className="space-y-4 text-center">
-                            <p>Ajoutez un texte en filigrane sur les pièces de votre dossier.</p>
-                            <p>
-                                Fonctionne à <b>100% dans votre navigateur</b>. Votre dossier reste
-                                privé, et n&apos;est jamais transféré vers nos serveurs.
-                            </p>
-                        </div>
-                        {/* <ol className="list-inside list-decimal text-md text-center sm:text-left">
-                            <li className="mb-2">
-                                <span className="mr-2" />
-                                Sélectionnez votre PDF
-                            </li>
-                            <li className="mb-2">
-                                <span className="mr-2" />
-                                Entrez votre texte
-                            </li>
-                            <li>
-                                <span className="mr-2" />
-                                Téléchargez votre dossier
-                            </li>
-                        </ol> */}
-
-                        <FileDropzone onFile={onDrop} />
-                        <form className="w-full space-y-8" onSubmit={handleSubmit(downloadPDF)}>
-                            <textarea
-                                aria-label="Texte du filigrane"
-                                className="flex min-h-[60px] w-full rounded-md border border-input bg-[#f6fff0] px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:cursor-not-allowed opacity-80 disabled:opacity-50 resize-none text-center"
-                                placeholder="Éditez votre filigram"
-                                // placeholder={`Valide uniquement pour dossier de location&#10;le ${intl.format(
-                                //     new Date(),
-                                // )}`}
-                                // disabled={!isReady}
-                                {...register('watermark', {
-                                    value: `Valide uniquement pour dossier de location\nle ${intl.format(
-                                        new Date(),
-                                    )}`,
-                                })}
-                            ></textarea>
-                            <div className="space-y-2 text-center text-sm text-red-700" role="alert">
-                                {watermarkText.trim().length === 0 ? <p>Saisissez le texte du filigrane.</p> : null}
-                                {watermarkLineCount > MAX_WATERMARK_LINES ? (
-                                    <p>Le filigrane est limité à {MAX_WATERMARK_LINES} lignes.</p>
-                                ) : null}
-                                {unsupportedChars.length > 0 ? (
-                                    <p>Caractères non pris en charge dans le filigrane : {unsupportedChars.join(' ')}</p>
-                                ) : null}
-                                {uploadError ? <p>{uploadError}</p> : null}
-                                {needsReload ? (
-                                    <Button type="button" variant="outline" onClick={() => window.location.reload()}>
-                                        Recharger la page
-                                    </Button>
-                                ) : null}
-                                {excludedNames.length > 0 ? (
-                                    <p>Fichiers retirés du dossier (conversion impossible) : {formatList(excludedNames)}</p>
-                                ) : null}
-                                {currentDownloadError ? <p>{currentDownloadError}</p> : null}
-                            </div>
-                            <div className="flex justify-center">
-                                {dossier && dossier.files.length > 0 ? (
-                                    <Button disabled={!isReady} type="submit">
-                                        <ArrowDownCircleIcon className="mx-auto mr-2 h-6 w-6" />
-                                        {isDownloading
-                                            ? 'Préparation du dossier…'
-                                            : isUploading
-                                              ? 'Lecture des fichiers…'
-                                              : 'Télécharger le dossier'}
-                                    </Button>
-                                ) : null}
-                            </div>
-                        </form>
-                    </div>
-                </main>
-                <footer className="flex py-8 flex-wrap items-center justify-center">
-                    <p>
-                        © {new Date().getFullYear()}{' '}
-                        <a href="https://byrds.consulting" className="text-[#3CDC1E]">
-                            <Image
-                                className="inline align-middle mx-1"
-                                aria-hidden
-                                src="/img/byrds/logo.png"
-                                alt="Globe icon"
-                                width={32}
-                                height={32}
-                            />
-                            Byrds Consulting
-                        </a>{' '}
-                        . Tous droits réservés.
+        <section className="grid w-full max-w-6xl grid-cols-1 gap-6 px-4 sm:px-6 md:grid-cols-2">
+            <form
+                className="flex min-w-0 flex-col gap-5 rounded-3xl border bg-card p-5 shadow-[0_1px_2px_rgb(15_26_12/0.04),0_16px_40px_rgb(15_26_12/0.06)] sm:p-7 dark:shadow-none"
+                onSubmit={handleSubmit(downloadPDF)}
+            >
+                <FileDropzone onFile={onDrop} className="grow" />
+                {dossier && dossier.files.length > 0 ? (
+                    <p className="-mt-2 text-center text-sm wrap-anywhere text-muted-foreground" aria-live="polite">
+                        {dossier.archiveName ?? 'Dossier'} · {exportableFiles.length}{' '}
+                        {exportableFiles.length > 1 ? 'fichiers' : 'fichier'}
                     </p>
-                </footer>
-            </div>
-            <div className="md:basis-2/5 w-full md:overflow-y-auto overflow-x-hidden md:max-h-full">
+                ) : null}
+                <div className="flex flex-col gap-2">
+                    <label htmlFor="watermark" className="text-sm font-semibold">
+                        Mention à apposer
+                    </label>
+                    <textarea
+                        id="watermark"
+                        rows={3}
+                        className="w-full resize-none rounded-xl border border-control-border bg-background px-4 py-3 text-[15px] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
+                        placeholder="Saisissez le texte du filigrane"
+                        {...register('watermark', {
+                            value: `Valide uniquement pour dossier de location\nle ${intl.format(new Date())}`,
+                        })}
+                    ></textarea>
+                </div>
+                <div className="space-y-2 text-center text-sm wrap-anywhere text-destructive empty:hidden" role="alert">
+                    {watermarkText.trim().length === 0 ? <p>Saisissez le texte du filigrane.</p> : null}
+                    {watermarkLineCount > MAX_WATERMARK_LINES ? (
+                        <p>Le filigrane est limité à {MAX_WATERMARK_LINES} lignes.</p>
+                    ) : null}
+                    {unsupportedChars.length > 0 ? (
+                        <p>Caractères non pris en charge dans le filigrane : {unsupportedChars.join(' ')}</p>
+                    ) : null}
+                    {uploadError ? <p>{uploadError}</p> : null}
+                    {needsReload ? (
+                        <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+                            Recharger la page
+                        </Button>
+                    ) : null}
+                    {excludedNames.length > 0 ? (
+                        <p>Fichiers retirés du dossier (conversion impossible) : {formatList(excludedNames)}</p>
+                    ) : null}
+                    {currentDownloadError ? <p>{currentDownloadError}</p> : null}
+                </div>
+                <Button
+                    disabled={!isReady}
+                    type="submit"
+                    className="h-auto min-h-13 rounded-xl py-3 text-base font-semibold whitespace-normal"
+                >
+                    <ArrowDownTrayIcon aria-hidden className="mr-2 size-5 shrink-0" />
+                    {isDownloading
+                        ? 'Préparation du dossier…'
+                        : isUploading
+                          ? 'Lecture des fichiers…'
+                          : 'Télécharger le dossier protégé'}
+                </Button>
+            </form>
+            {/* Focusable so that keyboard users can scroll through the pages. */}
+            <div
+                role="region"
+                aria-label="Aperçu"
+                tabIndex={0}
+                className="focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring max-h-[80vh] min-w-0 overflow-y-auto rounded-3xl border bg-muted px-5 py-3 sm:px-8 md:max-h-[720px] dark:bg-card"
+            >
                 {/* sentry-block: never record the user's documents in Session Replay. */}
-                <div className="mt-16 pr-8 w-[120%] sentry-block">
+                <div className="sentry-block">
                     <PreviewBoundary>
                         <PDFViewer file={previewFile?.bytes} watermarkText={previewFile ? watermarkText : undefined} />
                     </PreviewBoundary>
                 </div>
             </div>
-        </div>
+        </section>
     )
 }
