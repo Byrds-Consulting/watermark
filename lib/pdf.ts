@@ -19,12 +19,19 @@ function getWatermarkCharset() {
     return charsetPromise
 }
 
+/** Line breaks unified, tabs (often pasted) turned into spaces like the previous renderer did. */
+function normalizeWatermarkText(text: string) {
+    return text.replace(/\r\n?/g, '\n').replace(/\t/g, ' ')
+}
+
 /** Characters of `text` that cannot be drawn in the watermark (emoji, most non-Latin scripts, …). */
 export async function getUnsupportedWatermarkChars(text: string) {
     const charset = await getWatermarkCharset()
     return [
         ...new Set(
-            Array.from(text).filter((char) => char !== '\n' && !charset.has(char.codePointAt(0)!)),
+            Array.from(normalizeWatermarkText(text)).filter(
+                (char) => char !== '\n' && !charset.has(char.codePointAt(0)!),
+            ),
         ),
     ]
 }
@@ -41,7 +48,7 @@ export async function createWatermarkOverlay(
     // Drop what the font cannot encode instead of throwing (the UI blocks the download meanwhile),
     // and the blank lines/spaces around the text, which would only push it off the page.
     const unsupported = new Set(await getUnsupportedWatermarkChars(text))
-    const lines = Array.from(text.replace(/\r\n?/g, '\n'))
+    const lines = Array.from(normalizeWatermarkText(text))
         .filter((char) => !unsupported.has(char))
         .join('')
         .split('\n')

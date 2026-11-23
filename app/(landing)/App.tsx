@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePlausible } from 'next-plausible'
 
 import { FileDropzone } from '@/app/(landing)/FileDropzone'
+import { PreviewBoundary } from '@/app/(landing)/PreviewBoundary'
 import { downloadBlob, getUnsupportedWatermarkChars, MAX_WATERMARK_LINES } from '@/lib/pdf'
 import { isLimitError, processFiles, uniqueNames, type SourceFile } from '@/lib/files'
 import dynamic from 'next/dynamic'
@@ -210,8 +211,9 @@ export const App = () => {
         dossier && downloadError?.dossierId === dossier.id ? downloadError.value : null
 
     return (
-        <div className="flex w-full gap-8 h-screen">
-            <div className="grow p-8 sm:p-20 pt-16">
+        // Side by side on wide screens (each column scrolls); stacked, page scrolling, on phones.
+        <div className="flex flex-col md:flex-row w-full gap-8 min-h-screen md:h-screen">
+            <div className="grow p-8 sm:p-20 pt-16 md:overflow-y-auto">
                 <main className="flex flex-col gap-8 items-center w-full min-h-full">
                     <div className="flex flex-col gap-8 items-center max-w-lg">
                         <h1 className="text-4xl font-bold">
@@ -318,10 +320,12 @@ export const App = () => {
                     </p>
                 </footer>
             </div>
-            <div className="basis-2/5 w-full overflow-y-auto overflow-x-hidden max-h-full">
+            <div className="md:basis-2/5 w-full md:overflow-y-auto overflow-x-hidden md:max-h-full">
                 {/* sentry-block: never record the user's documents in Session Replay. */}
                 <div className="mt-16 pr-8 w-[120%] sentry-block">
-                    <PDFViewer file={previewFile?.bytes} watermarkText={previewFile ? watermarkText : undefined} />
+                    <PreviewBoundary>
+                        <PDFViewer file={previewFile?.bytes} watermarkText={previewFile ? watermarkText : undefined} />
+                    </PreviewBoundary>
                 </div>
             </div>
         </div>
