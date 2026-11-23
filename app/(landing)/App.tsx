@@ -228,7 +228,7 @@ export const App = () => {
                     <textarea
                         id="watermark"
                         rows={3}
-                        className="w-full resize-none rounded-xl border border-input bg-background px-4 py-3 text-[15px] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="w-full resize-none rounded-xl border border-control-border bg-background px-4 py-3 text-[15px] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
                         placeholder="Saisissez le texte du filigrane"
                         {...register('watermark', {
                             value: `Valide uniquement pour dossier de location\nle ${intl.format(new Date())}`,
