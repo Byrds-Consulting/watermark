@@ -30,12 +30,7 @@ export default function Home() {
                     <ShieldCheckIcon aria-hidden className="size-6 text-brand" />
                     Dossier PDF sécurisé
                 </span>
-                <div className="flex items-center gap-4">
-                    <a href="https://byrds.consulting" className="hidden text-sm text-brand hover:underline sm:inline">
-                        par Byrds Consulting
-                    </a>
-                    <ThemeToggle />
-                </div>
+                <ThemeToggle />
             </header>
 
             <main className="flex w-full flex-col items-center">
