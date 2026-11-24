@@ -84,6 +84,8 @@ export const metadata: Metadata = {
                 url: '/img/icon-dark.png',
                 href: '/img/icon-dark.png',
             },
+            // Same shield as the header; its colors follow the system theme. PNGs above for Safari.
+            { url: '/img/icon.svg', type: 'image/svg+xml' },
         ],
     },
 }

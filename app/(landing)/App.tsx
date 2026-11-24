@@ -11,7 +11,14 @@ import { usePlausible } from 'next-plausible'
 
 import { FileDropzone } from '@/app/(landing)/FileDropzone'
 import { PreviewBoundary } from '@/app/(landing)/PreviewBoundary'
-import { downloadBlob, getUnsupportedWatermarkChars, MAX_WATERMARK_LINES } from '@/lib/pdf'
+import {
+    DEFAULT_WATERMARK_STYLE,
+    downloadBlob,
+    getUnsupportedWatermarkChars,
+    MAX_WATERMARK_LINES,
+    type WatermarkStyle,
+} from '@/lib/pdf'
+import { WatermarkSettings } from '@/app/(landing)/WatermarkSettings'
 import { isLimitError, processFiles, uniqueNames, type SourceFile } from '@/lib/files'
 import dynamic from 'next/dynamic'
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline'
@@ -48,6 +55,9 @@ export const App = () => {
     const { register, handleSubmit, watch } = useForm<{ watermark: string }>()
     const watermarkTextValue = watch('watermark') ?? ''
     const watermarkText = useDebounce<string>(watermarkTextValue, 200)
+    const [watermarkStyle, setWatermarkStyle] = useState<WatermarkStyle>(DEFAULT_WATERMARK_STYLE)
+    // Sliders fire on every step: redraw the preview once they settle.
+    const previewStyle = useDebounce<WatermarkStyle>(watermarkStyle, 150)
     const plausible = usePlausible()
 
     const excludedNames = useMemo(
@@ -141,6 +151,7 @@ export const App = () => {
         // Export exactly this generation, whatever the user does while it runs.
         const { id: dossierId, archiveName } = dossier
         const text = watermarkText
+        const style = watermarkStyle
         const files = exportableFiles
         const asZip = archiveName !== null || dossier.files.length > 1
         plausible('File download')
@@ -152,7 +163,7 @@ export const App = () => {
             const failures: string[] = []
             for (const file of files) {
                 try {
-                    exported.push({ name: file.name, bytes: await flattenPdf(file.bytes, text) })
+                    exported.push({ name: file.name, bytes: await flattenPdf(file.bytes, text, style) })
                 } catch (error) {
                     captureException(error)
                     failures.push(file.name)
@@ -201,7 +212,7 @@ export const App = () => {
         } finally {
             setIsDownloading(false)
         }
-    }, [isReady, dossier, watermarkText, exportableFiles, plausible])
+    }, [isReady, dossier, watermarkText, watermarkStyle, exportableFiles, plausible])
 
     // Preview the first file that will be exported, with the watermark as currently typed.
     const previewFile = exportableFiles[0]
@@ -235,6 +246,7 @@ export const App = () => {
                         })}
                     ></textarea>
                 </div>
+                <WatermarkSettings style={watermarkStyle} onChange={setWatermarkStyle} />
                 <div className="space-y-2 text-center text-sm wrap-anywhere text-destructive empty:hidden" role="alert">
                     {watermarkText.trim().length === 0 ? <p>Saisissez le texte du filigrane.</p> : null}
                     {watermarkLineCount > MAX_WATERMARK_LINES ? (
@@ -277,7 +289,7 @@ export const App = () => {
                 {/* sentry-block: never record the user's documents in Session Replay. */}
                 <div className="sentry-block">
                     <PreviewBoundary>
-                        <PDFViewer file={previewFile?.bytes} watermarkText={previewFile ? watermarkText : undefined} />
+                        <PDFViewer file={previewFile?.bytes} watermarkText={watermarkText} watermarkStyle={previewStyle} />
                     </PreviewBoundary>
                 </div>
             </div>

@@ -1,5 +1,5 @@
 import { PDFDocument } from 'pdf-lib'
-import { createWatermarkOverlay } from '@/lib/pdf'
+import { createWatermarkOverlay, type WatermarkStyle } from '@/lib/pdf'
 import { getPageSizes, loadPdf, renderPage } from '@/lib/render'
 
 // 144 DPI, independent of the preview size and of the device pixel ratio.
@@ -25,14 +25,18 @@ function canvasToJpeg(canvas: HTMLCanvasElement) {
  * can cover the watermark, and it cannot be removed from the result. Each page keeps its displayed
  * size in PDF points.
  */
-export async function flattenPdf(bytes: Uint8Array, watermarkText: string): Promise<Uint8Array> {
+export async function flattenPdf(
+    bytes: Uint8Array,
+    watermarkText: string,
+    watermarkStyle: WatermarkStyle,
+): Promise<Uint8Array> {
     const sourceTask = loadPdf(bytes)
     let overlayTask: ReturnType<typeof loadPdf> | undefined
     try {
         const source = await sourceTask.promise
         if (source.numPages === 0) throw new Error('PDF without pages')
         const sizes = await getPageSizes(source)
-        overlayTask = loadPdf(await createWatermarkOverlay(sizes, watermarkText))
+        overlayTask = loadPdf(await createWatermarkOverlay(sizes, watermarkText, watermarkStyle))
         const overlay = await overlayTask.promise
         const output = await PDFDocument.create()
         output.setProducer('Dossier PDF (https://dossierpdf.fr)')
