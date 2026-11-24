@@ -2,16 +2,25 @@
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import { createWatermarkOverlay } from '@/lib/pdf'
+import { createWatermarkOverlay, type WatermarkStyle } from '@/lib/pdf'
 import { getPageSizes, loadPdf, renderPage, type PageSize } from '@/lib/render'
 
 const SAMPLE_URL = '/sample.pdf'
 
 /**
  * Preview of a PDF with its watermark, rendered by the same code as the export (lib/render.ts).
- * Without `file`, shows the sample document as it is.
+ * Without `file`, shows the sample document, with the watermark too: visitors can try the settings
+ * before importing anything.
  */
-export default function PDFViewer({ file, watermarkText }: { file?: Uint8Array; watermarkText?: string }) {
+export default function PDFViewer({
+    file,
+    watermarkText,
+    watermarkStyle,
+}: {
+    file?: Uint8Array
+    watermarkText?: string
+    watermarkStyle: WatermarkStyle
+}) {
     const containerRef = useRef<HTMLDivElement>(null)
     const [width, setWidth] = useState(0)
     const [doc, setDoc] = useState<{ pdf: PDFDocumentProxy; sizes: PageSize[] } | null>(null)
@@ -62,8 +71,8 @@ export default function PDFViewer({ file, watermarkText }: { file?: Uint8Array; 
         let overlayTask: ReturnType<typeof loadPdf> | undefined
         ;(async () => {
             let overlay = null
-            if (file && watermarkText !== undefined) {
-                const overlayBytes = await createWatermarkOverlay(doc.sizes, watermarkText)
+            if (watermarkText !== undefined) {
+                const overlayBytes = await createWatermarkOverlay(doc.sizes, watermarkText, watermarkStyle)
                 if (cancelled) return
                 // Assigned before awaiting, so that the cleanup destroys it (and its worker port).
                 overlayTask = loadPdf(overlayBytes)
@@ -96,7 +105,7 @@ export default function PDFViewer({ file, watermarkText }: { file?: Uint8Array; 
             cancelled = true
             overlayTask?.destroy()
         }
-    }, [doc, file, source, watermarkText, width])
+    }, [doc, source, watermarkText, watermarkStyle, width])
 
     const loading = !error && (doc === null || renderedDoc !== doc)
 
