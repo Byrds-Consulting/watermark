@@ -27,7 +27,7 @@ const faq = [
     },
     {
         question: 'Le filigrane empêche-t-il l’agence de vérifier mes revenus ?',
-        answer: 'Non, si l’opacité reste modérée. Avec le réglage par défaut (40 %), les montants et les noms restent lisibles à travers la mention. Vérifiez dans l’aperçu que les chiffres importants ne sont pas masqués.',
+        answer: 'Non, si l’opacité reste modérée. Avec le réglage par défaut (25 %), les montants et les noms restent lisibles à travers la mention. Vérifiez dans l’aperçu que les chiffres importants ne sont pas masqués.',
     },
     {
         question: 'Et si la plateforme de location me demande de déposer mes pièces en ligne ?',

@@ -31,7 +31,7 @@ const faq = [
     },
     {
         question: 'Le filigrane peut-il masquer ma photo ou mon numéro ?',
-        answer: 'Il passe par-dessus, en transparence. Avec une opacité autour de 40 %, tout reste lisible. Si un caractère important tombe sous le texte, réduisez la taille ou modifiez l’angle et vérifiez dans l’aperçu.',
+        answer: 'Il passe par-dessus, en transparence. Avec une opacité autour de 25 %, tout reste lisible. Si un caractère important tombe sous le texte, réduisez la taille ou modifiez l’angle et vérifiez dans l’aperçu.',
     },
 ]
 

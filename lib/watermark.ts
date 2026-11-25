@@ -39,10 +39,10 @@ export const MULTI_COLOR_PALETTE = ['#8c6a6a', '#62788f', '#6e8572', '#7f7491', 
 /** Greyish multicolor, gently waving, transparent and spaced out: reads as a mark without hiding the document. */
 export const DEFAULT_WATERMARK_STYLE: WatermarkStyle = {
     color: MULTI_COLOR,
-    opacity: 0.4,
+    opacity: 0.25,
     angle: 30,
-    size: 1,
-    spacing: 1.8,
+    size: 0.8,
+    spacing: 1.5,
     repeat: true,
     wave: 0.3,
 }
