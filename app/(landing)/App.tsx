@@ -29,9 +29,11 @@ const PDFViewer = dynamic(() => import('./PDFViewer'), {
  * The uploaded dossier. `id` changes on every upload, so stale async results can be detected.
  * `files`: the PDFs to export. `locked`: the password-protected PDFs and whether they were unlocked
  * (then also in `files`, with their password); `lockedBytes` keeps their content until then.
+ * `order`: the names of all of them in upload order, which unlocked files keep.
  */
 type Dossier = {
     id: number
+    order: string[]
     archiveName: string | null
     files: SourceFile[]
     locked: LockedFile[]
@@ -74,7 +76,12 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
         [dossier, excluded],
     )
     const exportableFiles = useMemo(
-        () => (dossier ? dossier.files.filter((file) => !excludedNames.includes(file.name)) : []),
+        () =>
+            dossier
+                ? dossier.files
+                      .filter((file) => !excludedNames.includes(file.name))
+                      .sort((a, b) => dossier.order.indexOf(a.name) - dossier.order.indexOf(b.name))
+                : [],
         [dossier, excludedNames],
     )
     const watermarkLineCount = watermarkText.trim().split(/\r\n?|\n/).length
@@ -106,19 +113,19 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
                 // Keep only the PDFs that pdf.js (the preview and export renderer) can open.
                 const { checkPdf } = await import('@/lib/render')
                 setNeedsReload(false)
-                const readable: SourceFile[] = []
-                const protectedFiles: SourceFile[] = []
+                // In upload order, the protected files included: they may join the dossier later.
+                const usable: { file: SourceFile; locked: boolean }[] = []
                 const unreadable: string[] = []
                 for (const file of files) {
                     const status = await checkPdf(file.bytes)
-                    if (status === 'readable') readable.push(file)
-                    else if (status === 'password') protectedFiles.push(file)
-                    else unreadable.push(file.name)
+                    if (status === 'unreadable') unreadable.push(file.name)
+                    else usable.push({ file, locked: status === 'password' })
                 }
                 if (id !== uploadId.current) return // a newer upload superseded this one
-                // Unique among the protected files too: they may join the dossier later.
-                const names = uniqueNames([...readable, ...protectedFiles].map((file) => file.name))
-                const lockedNames = names.slice(readable.length)
+                const names = uniqueNames(usable.map(({ file }) => file.name))
+                const named = usable.map(({ file, locked }, idx) => ({ file: { ...file, name: names[idx] }, locked }))
+                const readable = named.filter(({ locked }) => !locked).map(({ file }) => file)
+                const protectedFiles = named.filter(({ locked }) => locked).map(({ file }) => file)
                 // A single selected archive is downloaded back as an archive, under its name.
                 const archiveName =
                     acceptedFiles.length === 1 && archives.length === 1
@@ -129,9 +136,10 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
                 setDossier({
                     id,
                     archiveName,
-                    files: readable.map((file, idx) => ({ ...file, name: names[idx] })),
-                    locked: lockedNames.map((name) => ({ name, status: 'locked' })),
-                    lockedBytes: new Map(lockedNames.map((name, idx) => [name, protectedFiles[idx].bytes])),
+                    order: names,
+                    files: readable,
+                    locked: protectedFiles.map(({ name }) => ({ name, status: 'locked' })),
+                    lockedBytes: new Map(protectedFiles.map(({ name, bytes }) => [name, bytes])),
                 })
                 setIsPasswordDialogOpen(protectedFiles.length > 0)
                 const errors: string[] = []
@@ -291,7 +299,14 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
     }, [isReady, dossier, watermarkText, watermarkStyle, exportableFiles, plausible])
 
     // Preview the first file that will be exported, with the watermark as currently typed.
-    const previewFile = exportableFiles[0]
+    // The first file of the dossier, a locked one included (shown as a locked page).
+    const previewName = dossier?.order.find(
+        (name) =>
+            exportableFiles.some((file) => file.name === name) ||
+            dossier.locked.some((file) => file.name === name && file.status === 'locked'),
+    )
+    const previewFile = exportableFiles.find((file) => file.name === previewName)
+    const previewLocked = previewName !== undefined && !previewFile
     const lockedCount = dossier ? dossier.locked.filter((file) => file.status === 'locked').length : 0
     const currentDownloadError =
         dossier && downloadError?.dossierId === dossier.id ? downloadError.value : null
@@ -376,10 +391,23 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
                 {/* sentry-block: never record the user's documents in Session Replay. */}
                 <div className="sentry-block">
                     <PreviewBoundary>
-                        <PDFViewer
-                            file={previewFile?.bytes}
-                            password={previewFile?.password}
-                            watermarkText={watermarkText} watermarkStyle={previewStyle} />
+                        {previewLocked ? (
+                            // Its size is unknown until it is opened: an A4 page.
+                            <div
+                                role="img"
+                                aria-label={`${previewName} : protégé par mot de passe`}
+                                className="my-4 grid aspect-[210/297] w-full place-items-center rounded-(--radius) bg-white shadow-md"
+                            >
+                                <LockClosedIcon aria-hidden className="size-12 text-neutral-400" />
+                            </div>
+                        ) : (
+                            <PDFViewer
+                                file={previewFile?.bytes}
+                                password={previewFile?.password}
+                                watermarkText={watermarkText}
+                                watermarkStyle={previewStyle}
+                            />
+                        )}
                     </PreviewBoundary>
                 </div>
             </div>
