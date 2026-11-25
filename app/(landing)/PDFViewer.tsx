@@ -7,6 +7,11 @@ import { getPageSizes, loadPdf, renderPage, type PageSize } from '@/lib/render'
 
 const SAMPLE_URL = '/sample.pdf'
 
+/** The height of an A4 page across the container, with the pages' vertical margins (`my-4`). */
+function a4Height(container: HTMLElement) {
+    return (container.offsetWidth * 297) / 210 + 32
+}
+
 /**
  * Preview of a PDF with its watermark, rendered by the same code as the export (lib/render.ts).
  * Without `file`, shows the sample document, with the watermark too: visitors can try the settings
@@ -38,9 +43,9 @@ export default function PDFViewer({
         const container = containerRef.current
         if (!container) return
         setWidth(container.offsetWidth)
-        // Until the first pages are drawn, hold the space of an A4 page with its margins (like the
-        // locked-file placeholder this viewer may replace).
-        container.style.minHeight = `${(container.offsetWidth * 297) / 210 + 32}px`
+        // Until the first pages are drawn, hold the space of an A4 page (like the locked-file
+        // placeholder this viewer may replace).
+        container.style.minHeight = `${a4Height(container)}px`
         // Follow window resizes and phone rotations.
         const observer = new ResizeObserver(() => setWidth(container.offsetWidth))
         observer.observe(container)
@@ -53,7 +58,8 @@ export default function PDFViewer({
         if (container) {
             // Never show the pages of the previous file while the new one loads, but keep their
             // height until the new pages are drawn, so that the layout does not jump.
-            container.style.minHeight = `${container.offsetHeight}px`
+            // At least an A4 page, where the loading spinner shows.
+            container.style.minHeight = `${Math.max(container.offsetHeight, a4Height(container))}px`
             container.replaceChildren()
         }
         const task = loadPdf(source, { password })
@@ -123,9 +129,18 @@ export default function PDFViewer({
     const loading = !error && (doc === null || renderedDoc !== doc)
 
     return (
-        <div className="PDFViewer w-full select-none pointer-events-none">
+        <div className="PDFViewer relative w-full select-none pointer-events-none">
             {error ? <p className="text-sm text-center opacity-60">Aperçu indisponible pour ce fichier.</p> : null}
-            {loading ? <p className="text-sm text-center opacity-60">Chargement de l’aperçu…</p> : null}
+            {loading ? (
+                // Centered on the space of the first page.
+                <div className="absolute inset-x-0 top-0 my-4 grid aspect-[210/297] place-items-center">
+                    <div
+                        role="status"
+                        aria-label="Chargement de l’aperçu"
+                        className="size-8 animate-spin rounded-full border-3 border-current border-t-transparent opacity-40"
+                    />
+                </div>
+            ) : null}
             {/* flow-root: the pages' margins count in its height, which is kept while switching files. */}
             <div ref={containerRef} className="flow-root" />
         </div>
