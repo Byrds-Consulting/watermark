@@ -8,7 +8,7 @@ const MAX_TILE_STEPS = 50
 
 /** How the watermark is drawn. Every field is bounded by WATERMARK_LIMITS. */
 export type WatermarkStyle = {
-    /** `#rrggbb`. */
+    /** `#rrggbb`, or MULTI_COLOR to alternate the MULTI_COLOR_PALETTE tones from one copy to the next. */
     color: string
     /** 0 (invisible) to 1 (opaque). */
     opacity: number
@@ -20,6 +20,8 @@ export type WatermarkStyle = {
     spacing: number
     /** Tile copies over the whole page, or draw a single centred one. */
     repeat: boolean
+    /** Wave amplitude: 0 draws straight text, 1 the strongest undulation. */
+    wave: number
 }
 
 export const WATERMARK_LIMITS = {
@@ -27,16 +29,29 @@ export const WATERMARK_LIMITS = {
     angle: { min: -90, max: 90 },
     size: { min: 0.5, max: 2 },
     spacing: { min: 0.5, max: 3 },
+    wave: { min: 0, max: 1 },
 } as const
 
-/** Light green, transparent and spaced out: reads as a mark without hiding the document. */
+// Wave shape, in units of the text size: peak amplitude at `wave` = 1, and wavelength. With these
+// values the steepest slope is about 28°, so the letters stay readable.
+const WAVE_AMPLITUDE = 1
+const WAVE_LENGTH = 12
+
+/** `color` value that alternates several tones instead of a single color. */
+export const MULTI_COLOR = 'multi'
+
+/** Greyish tones of the multicolor watermark: distinct from each other, discreet over the text. */
+export const MULTI_COLOR_PALETTE = ['#8c6a6a', '#62788f', '#6e8572', '#7f7491', '#8a7f62']
+
+/** Greyish multicolor, gently waving, transparent and spaced out: reads as a mark without hiding the document. */
 export const DEFAULT_WATERMARK_STYLE: WatermarkStyle = {
-    color: '#146b0a',
+    color: MULTI_COLOR,
     opacity: 0.4,
     angle: 30,
     size: 1,
     spacing: 1.8,
     repeat: true,
+    wave: 0.3,
 }
 
 const clamp = (value: number, { min, max }: { min: number; max: number }, fallback: number) =>
@@ -46,12 +61,16 @@ const clamp = (value: number, { min, max }: { min: number; max: number }, fallba
 function normalizeStyle(style: Partial<WatermarkStyle>): WatermarkStyle {
     const d = DEFAULT_WATERMARK_STYLE
     return {
-        color: typeof style.color === 'string' && /^#[0-9a-f]{6}$/i.test(style.color) ? style.color : d.color,
+        color:
+            style.color === MULTI_COLOR || (typeof style.color === 'string' && /^#[0-9a-f]{6}$/i.test(style.color))
+                ? style.color
+                : d.color,
         opacity: clamp(style.opacity ?? d.opacity, WATERMARK_LIMITS.opacity, d.opacity),
         angle: clamp(style.angle ?? d.angle, WATERMARK_LIMITS.angle, d.angle),
         size: clamp(style.size ?? d.size, WATERMARK_LIMITS.size, d.size),
         spacing: clamp(style.spacing ?? d.spacing, WATERMARK_LIMITS.spacing, d.spacing),
         repeat: style.repeat ?? d.repeat,
+        wave: clamp(style.wave ?? d.wave, WATERMARK_LIMITS.wave, d.wave),
     }
 }
 
@@ -155,7 +174,10 @@ export async function createWatermarkOverlay(
     // Along the text and perpendicular to it (the text's "up"), in PDF coordinates (y up).
     const along = { x: cos, y: sin }
     const up = { x: -sin, y: cos }
-    const color = hexToRgb(style.color)
+    const colors = (style.color === MULTI_COLOR ? MULTI_COLOR_PALETTE : [style.color]).map(hexToRgb)
+    // Extra height taken by the waves (crest to trough), in units of the text size.
+    const waveHeight1 = 2 * WAVE_AMPLITUDE * style.wave
+    const glyphAdvances1 = lines.map((line) => Array.from(line).map((char) => [char, font.widthOfTextAtSize(char, 1)] as const))
 
     for (const { width, height } of sizes) {
         const page = pdfDoc.addPage([width, height])
@@ -165,10 +187,28 @@ export async function createWatermarkOverlay(
         // projection of the block's width and height.
         const size = Math.min(
             ((1.1 * (2 * shortSide)) / maxChars) * style.size,
-            (0.95 * width) / (maxWidth1 * Math.abs(cos) + lines.length * Math.abs(sin)),
-            (0.95 * height) / (maxWidth1 * Math.abs(sin) + lines.length * Math.abs(cos)),
+            (0.95 * width) / (maxWidth1 * Math.abs(cos) + (lines.length + waveHeight1) * Math.abs(sin)),
+            (0.95 * height) / (maxWidth1 * Math.abs(sin) + (lines.length + waveHeight1) * Math.abs(cos)),
         )
         const blockHeight = lines.length * size
+        // Offset of the wave (perpendicular to the rows) and its slope, at abscissa s along a row.
+        // The phase only depends on s, so all rows undulate in parallel and never collide.
+        const amplitude = WAVE_AMPLITUDE * style.wave * size
+        const waveNumber = (2 * Math.PI) / (WAVE_LENGTH * size)
+        const waveOffset = (s: number) => amplitude * Math.sin(waveNumber * s)
+        const waveSlope = (s: number) => amplitude * waveNumber * Math.cos(waveNumber * s)
+        /** Abscissa of the middle of each glyph, laid out along the curve from `start`. */
+        const layoutGlyphs = (glyphs: readonly (readonly [string, number])[], start: number) => {
+            let s = start
+            const mids = glyphs.map(([, advance1]) => {
+                // Advance along the curve (arc length), not along the row: steep parts take less room.
+                const step = (advance1 * size) / Math.hypot(1, waveSlope(s + (advance1 * size) / 2))
+                const mid = s + step / 2
+                s += step
+                return mid
+            })
+            return { mids, end: s }
+        }
         // Copies are tiled (staggered rows) along both directions, starting from one centred on the
         // page, which is therefore always complete, until the whole page is covered.
         // Density from the page's geometric mean size, so that long narrow pages are covered evenly.
@@ -179,7 +219,7 @@ export async function createWatermarkOverlay(
         // Bounded for degenerate page sizes (e.g. 14400 × 0.01 pt); A4 needs ~7 rows on each side.
         const rows = style.repeat ? Math.min(MAX_TILE_STEPS, Math.ceil(halfDiagonal / rowSpacing) + 1) : 0
         // A copy whose bounding circle does not reach the page rectangle is not drawn.
-        const blockRadius = Math.hypot(maxWidth1 * size, blockHeight) / 2
+        const blockRadius = Math.hypot(maxWidth1 * size, blockHeight + waveHeight1 * size) / 2
         const area = { minX: -blockRadius, maxX: width + blockRadius, minY: -blockRadius, maxY: height + blockRadius }
         for (let k = -rows; k <= rows; k++) {
             // Row k is the line through `base` along the text direction: keep the part of it that
@@ -194,6 +234,8 @@ export async function createWatermarkOverlay(
                 : 0
             for (let j = firstColumn; j <= lastColumn; j++) {
                 const shift = (j + stagger) * columnSpacing
+                // Multicolor: neighbours differ both along a row and from one row to the next.
+                const color = colors[(((j + 2 * k) % colors.length) + colors.length) % colors.length]
                 const centerX = base.x + shift * along.x
                 const centerY = base.y + shift * along.y
                 const outsideX = Math.max(Math.abs(centerX - width / 2) - width / 2, 0)
@@ -204,6 +246,34 @@ export async function createWatermarkOverlay(
                     const lineWidth = lineWidths1[i] * size
                     // Baseline of line i, from the top of the block (descent ignored, ~0.2 em).
                     const offsetUp = blockHeight / 2 - (i + 1) * size + 0.2 * size
+                    if (amplitude > 0) {
+                        // One glyph at a time, each on the curve and turned along its tangent.
+                        const glyphs = glyphAdvances1[i]
+                        // Laid out once to measure the line along the row, then again centred.
+                        const first = layoutGlyphs(glyphs, shift - lineWidth / 2)
+                        const { mids } = layoutGlyphs(glyphs, shift - (first.end - (shift - lineWidth / 2)) / 2)
+                        glyphs.forEach(([char, advance1], g) => {
+                            const s = mids[g]
+                            const tilt = Math.atan(waveSlope(s))
+                            // Tangent of the curve, from the (along, up) basis to page coordinates.
+                            const tangent = {
+                                x: Math.cos(tilt) * along.x + Math.sin(tilt) * up.x,
+                                y: Math.cos(tilt) * along.y + Math.sin(tilt) * up.y,
+                            }
+                            const offset = offsetUp + waveOffset(s)
+                            const half = (advance1 * size) / 2
+                            page.drawText(char, {
+                                x: base.x + s * along.x + offset * up.x - half * tangent.x,
+                                y: base.y + s * along.y + offset * up.y - half * tangent.y,
+                                size,
+                                font,
+                                color,
+                                opacity: style.opacity,
+                                rotate: degrees(style.angle + (tilt * 180) / Math.PI),
+                            })
+                        })
+                        return
+                    }
                     page.drawText(line, {
                         x: centerX - (lineWidth / 2) * along.x + offsetUp * up.x,
                         y: centerY - (lineWidth / 2) * along.y + offsetUp * up.y,

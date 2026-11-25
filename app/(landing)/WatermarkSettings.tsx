@@ -2,10 +2,22 @@
 
 import { useId } from 'react'
 import { AdjustmentsHorizontalIcon, CheckIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
-import { DEFAULT_WATERMARK_STYLE, WATERMARK_LIMITS, type WatermarkStyle } from '@/lib/pdf'
+import {
+    DEFAULT_WATERMARK_STYLE,
+    MULTI_COLOR,
+    MULTI_COLOR_PALETTE,
+    WATERMARK_LIMITS,
+    type WatermarkStyle,
+} from '@/lib/pdf'
 import { cn } from '@/lib/utils'
 
+const multiSwatch = `conic-gradient(${MULTI_COLOR_PALETTE.map(
+    (color, i) =>
+        `${color} ${(i * 100) / MULTI_COLOR_PALETTE.length}% ${((i + 1) * 100) / MULTI_COLOR_PALETTE.length}%`,
+).join(', ')})`
+
 const COLORS = [
+    { name: 'Multicolore', value: MULTI_COLOR, swatch: multiSwatch },
     { name: 'Vert', value: '#146b0a' },
     { name: 'Rouge', value: '#d92d20' },
     { name: 'Bleu', value: '#1d4ed8' },
@@ -64,7 +76,7 @@ function Slider({
     )
 }
 
-/** Appearance of the watermark: color, opacity, angle, size, spacing and tiling. */
+/** Appearance of the watermark: color, opacity, angle, size, waves, spacing and tiling. */
 export function WatermarkSettings({
     style,
     onChange,
@@ -102,7 +114,7 @@ export function WatermarkSettings({
                                     className="sr-only"
                                 />
                                 <span className="sr-only">{color.name}</span>
-                                <span aria-hidden className="size-7 rounded-full" style={{ backgroundColor: color.value }} />
+                                <span aria-hidden className="size-7 rounded-full" style={{ background: 'swatch' in color ? color.swatch : color.value }} />
                                 {style.color === color.value ? (
                                     <CheckIcon aria-hidden className="absolute size-4 text-white" />
                                 ) : null}
@@ -127,7 +139,7 @@ export function WatermarkSettings({
                             />
                             <input
                                 type="color"
-                                value={style.color}
+                                value={style.color === MULTI_COLOR ? MULTI_COLOR_PALETTE[0] : style.color}
                                 onChange={(event) => set('color', event.target.value)}
                                 className="absolute inset-0 size-full cursor-pointer opacity-0"
                             />
@@ -157,6 +169,14 @@ export function WatermarkSettings({
                     {...WATERMARK_LIMITS.size}
                     step={0.1}
                     onChange={(value) => set('size', value)}
+                />
+                <Slider
+                    label="Vagues"
+                    value={style.wave}
+                    display={style.wave ? percent(style.wave) : 'Aucune'}
+                    {...WATERMARK_LIMITS.wave}
+                    step={0.1}
+                    onChange={(value) => set('wave', value)}
                 />
                 <div className="flex items-center gap-2.5 text-sm">
                     <input
