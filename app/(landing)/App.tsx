@@ -10,9 +10,15 @@ import { usePlausible } from 'next-plausible'
 
 import { FileDropzone } from '@/app/(landing)/FileDropzone'
 import { PreviewBoundary } from '@/app/(landing)/PreviewBoundary'
-import { DEFAULT_WATERMARK_STYLE, downloadBlob, MAX_WATERMARK_LINES, type WatermarkStyle } from '@/lib/watermark'
+import {
+    DEFAULT_WATERMARK_STYLE,
+    downloadBlob,
+    MAX_WATERMARK_LINES,
+    type WatermarkStyle,
+} from '@/lib/watermark'
 import { WatermarkSettings } from '@/app/(landing)/WatermarkSettings'
 import type { SourceFile } from '@/lib/files'
+import type { PreviewItem } from '@/app/(landing)/FileThumbnails'
 import dynamic from 'next/dynamic'
 import { ArrowDownTrayIcon, LockClosedIcon } from '@heroicons/react/24/outline'
 import { PasswordDialog, type LockedFile, type UnlockResult } from '@/app/(landing)/PasswordDialog'
@@ -22,6 +28,9 @@ import { useDebounce } from '@uidotdev/usehooks'
 const intl = new Intl.DateTimeFormat('fr-FR')
 
 const PDFViewer = dynamic(() => import('./PDFViewer'), {
+    ssr: false,
+})
+const FileThumbnails = dynamic(() => import('./FileThumbnails'), {
     ssr: false,
 })
 
@@ -59,6 +68,9 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
     const [isUploading, setIsUploading] = useState(false)
     const [isDownloading, setIsDownloading] = useState(false)
     const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
+    // The file chosen in the thumbnails above the preview.
+    const [selectedName, setSelectedName] = useState<ForDossier<string> | null>(null)
+    const previewScrollRef = useRef<HTMLDivElement>(null)
     const uploadId = useRef(0)
     // Default value known from the first render (server included): no "empty watermark" error flashes in.
     const { register, handleSubmit, watch } = useForm<{ watermark: string }>({
@@ -123,7 +135,10 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
                 }
                 if (id !== uploadId.current) return // a newer upload superseded this one
                 const names = uniqueNames(usable.map(({ file }) => file.name))
-                const named = usable.map(({ file, locked }, idx) => ({ file: { ...file, name: names[idx] }, locked }))
+                const named = usable.map(({ file, locked }, idx) => ({
+                    file: { ...file, name: names[idx] },
+                    locked,
+                }))
                 const readable = named.filter(({ locked }) => !locked).map(({ file }) => file)
                 const protectedFiles = named.filter(({ locked }) => locked).map(({ file }) => file)
                 // A single selected archive is downloaded back as an archive, under its name.
@@ -145,16 +160,23 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
                 const errors: string[] = []
                 if (readable.length === 0 && protectedFiles.length === 0)
                     errors.push('Aucun fichier PDF, JPEG ou PNG exploitable n’a été trouvé.')
-                if (rejected.length > 0) errors.push(`Fichiers ignorés (format non supporté ou illisible) : ${formatList(rejected)}`)
+                if (rejected.length > 0)
+                    errors.push(
+                        `Fichiers ignorés (format non supporté ou illisible) : ${formatList(rejected)}`,
+                    )
                 if (unreadable.length > 0)
-                    errors.push(`PDF ignorés (formulaires XFA ou endommagés) : ${formatList(unreadable)}`)
+                    errors.push(
+                        `PDF ignorés (formulaires XFA ou endommagés) : ${formatList(unreadable)}`,
+                    )
                 setUploadError(errors.length > 0 ? errors.join(' ') : null)
             } catch (error) {
                 if (id !== uploadId.current) return
                 setDossier(null)
                 if (error instanceof Error && error.name === 'PdfWorkerStartError') {
                     setNeedsReload(true)
-                    setUploadError('Le lecteur PDF n’a pas pu être chargé (connexion interrompue ?).')
+                    setUploadError(
+                        'Le lecteur PDF n’a pas pu être chargé (connexion interrompue ?).',
+                    )
                     return
                 }
                 const isLimit = filesModule?.isLimitError(error) ?? false
@@ -180,7 +202,11 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
             const { checkPdf } = await import('@/lib/render')
             const targets = [
                 name,
-                ...(tryOthers ? locked.filter((f) => f.status === 'locked' && f.name !== name).map((f) => f.name) : []),
+                ...(tryOthers
+                    ? locked
+                          .filter((f) => f.status === 'locked' && f.name !== name)
+                          .map((f) => f.name)
+                    : []),
             ]
             const results = new Map<string, UnlockResult>()
             for (const target of targets) {
@@ -197,14 +223,23 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
                     ...current,
                     files: [
                         ...current.files,
-                        ...opened.map((file) => ({ name: file.name, bytes: lockedBytes.get(file.name)!, password })),
+                        ...opened.map((file) => ({
+                            name: file.name,
+                            bytes: lockedBytes.get(file.name)!,
+                            password,
+                        })),
                     ],
                     locked: current.locked.map((file) => {
                         const result = file.status === 'locked' ? results.get(file.name) : undefined
                         if (result === 'readable')
-                            return { ...file, status: 'unlocked', unlockedBy: file.name === name ? undefined : name }
+                            return {
+                                ...file,
+                                status: 'unlocked',
+                                unlockedBy: file.name === name ? undefined : name,
+                            }
                         // Only for the typed file: the password of another file proves nothing here.
-                        if (result === 'unreadable' && file.name === name) return { ...file, status: 'unreadable' }
+                        if (result === 'unreadable' && file.name === name)
+                            return { ...file, status: 'unreadable' }
                         return file
                     }),
                 }
@@ -257,13 +292,18 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
                 plausible('File download error')
                 setExcluded((previous) => ({
                     dossierId,
-                    value: [...(previous?.dossierId === dossierId ? previous.value : []), ...failures],
+                    value: [
+                        ...(previous?.dossierId === dossierId ? previous.value : []),
+                        ...failures,
+                    ],
                 }))
                 setDownloadError({
                     dossierId,
                     value:
                         `Impossible de convertir ${formatList(failures)}.` +
-                        (exported.length > 0 ? ' Cliquez à nouveau sur « Télécharger » pour obtenir le reste.' : ''),
+                        (exported.length > 0
+                            ? ' Cliquez à nouveau sur « Télécharger » pour obtenir le reste.'
+                            : ''),
                 })
                 return
             }
@@ -298,16 +338,33 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
         }
     }, [isReady, dossier, watermarkText, watermarkStyle, exportableFiles, plausible])
 
-    // Preview the first file that will be exported, with the watermark as currently typed.
-    // The first file of the dossier, a locked one included (shown as a locked page).
-    const previewName = dossier?.order.find(
-        (name) =>
-            exportableFiles.some((file) => file.name === name) ||
-            dossier.locked.some((file) => file.name === name && file.status === 'locked'),
-    )
+    // The files that can be previewed, in upload order: the ones that will be exported, and the
+    // locked ones (shown as a locked page).
+    const previewItems = useMemo<PreviewItem[]>(() => {
+        if (!dossier) return []
+        return dossier.order.flatMap((name): PreviewItem[] => {
+            const file = exportableFiles.find((f) => f.name === name)
+            if (file) return [{ name, bytes: file.bytes, password: file.password, locked: false }]
+            const isLocked = dossier.locked.some((f) => f.name === name && f.status === 'locked')
+            return isLocked ? [{ name, locked: true }] : []
+        })
+    }, [dossier, exportableFiles])
+    // The chosen file, or the first one (also when the chosen one left the dossier).
+    const previewName =
+        (dossier &&
+            selectedName?.dossierId === dossier.id &&
+            previewItems.find((item) => item.name === selectedName.value)?.name) ||
+        previewItems[0]?.name
     const previewFile = exportableFiles.find((file) => file.name === previewName)
     const previewLocked = previewName !== undefined && !previewFile
-    const lockedCount = dossier ? dossier.locked.filter((file) => file.status === 'locked').length : 0
+
+    // Show another file from its first page.
+    useEffect(() => {
+        previewScrollRef.current?.scrollTo({ top: 0 })
+    }, [previewName])
+    const lockedCount = dossier
+        ? dossier.locked.filter((file) => file.status === 'locked').length
+        : 0
     const currentDownloadError =
         dossier && downloadError?.dossierId === dossier.id ? downloadError.value : null
 
@@ -319,7 +376,10 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
             >
                 <FileDropzone onFile={onDrop} className="grow" />
                 {dossier && dossier.files.length > 0 ? (
-                    <p className="-mt-2 text-center text-sm wrap-anywhere text-muted-foreground" aria-live="polite">
+                    <p
+                        className="-mt-2 text-center text-sm wrap-anywhere text-muted-foreground"
+                        aria-live="polite"
+                    >
                         {dossier.archiveName ?? 'Dossier'} · {exportableFiles.length}{' '}
                         {exportableFiles.length > 1 ? 'fichiers' : 'fichier'}
                     </p>
@@ -349,22 +409,37 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
                     ></textarea>
                 </div>
                 <WatermarkSettings style={watermarkStyle} onChange={setWatermarkStyle} />
-                <div className="space-y-2 text-center text-sm wrap-anywhere text-destructive empty:hidden" role="alert">
-                    {watermarkText.trim().length === 0 ? <p>Saisissez le texte du filigrane.</p> : null}
+                <div
+                    className="space-y-2 text-center text-sm wrap-anywhere text-destructive empty:hidden"
+                    role="alert"
+                >
+                    {watermarkText.trim().length === 0 ? (
+                        <p>Saisissez le texte du filigrane.</p>
+                    ) : null}
                     {watermarkLineCount > MAX_WATERMARK_LINES ? (
                         <p>Le filigrane est limité à {MAX_WATERMARK_LINES} lignes.</p>
                     ) : null}
                     {unsupportedChars.length > 0 ? (
-                        <p>Caractères non pris en charge dans le filigrane : {unsupportedChars.join(' ')}</p>
+                        <p>
+                            Caractères non pris en charge dans le filigrane :{' '}
+                            {unsupportedChars.join(' ')}
+                        </p>
                     ) : null}
                     {uploadError ? <p>{uploadError}</p> : null}
                     {needsReload ? (
-                        <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => window.location.reload()}
+                        >
                             Recharger la page
                         </Button>
                     ) : null}
                     {excludedNames.length > 0 ? (
-                        <p>Fichiers retirés du dossier (conversion impossible) : {formatList(excludedNames)}</p>
+                        <p>
+                            Fichiers retirés du dossier (conversion impossible) :{' '}
+                            {formatList(excludedNames)}
+                        </p>
                     ) : null}
                     {currentDownloadError ? <p>{currentDownloadError}</p> : null}
                 </div>
@@ -381,38 +456,53 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
                           : 'Télécharger le dossier protégé'}
                 </Button>
             </form>
-            {/* Focusable so that keyboard users can scroll through the pages. */}
-            <div
-                role="region"
-                aria-label="Aperçu"
-                tabIndex={0}
-                className="focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring max-h-[80vh] min-w-0 overflow-y-auto rounded-3xl border bg-muted px-5 py-3 sm:px-8 md:max-h-[720px] dark:bg-card"
-            >
-                {/* sentry-block: never record the user's documents in Session Replay. */}
-                <div className="sentry-block">
-                    <PreviewBoundary>
-                        {previewLocked ? (
-                            // Its size is unknown until it is opened: an A4 page.
-                            <button
-                                type="button"
-                                onClick={() => setIsPasswordDialogOpen(true)}
-                                aria-label={`${previewName} : protégé par mot de passe, saisir le mot de passe`}
-                                className="group my-4 grid aspect-[210/297] w-full cursor-pointer place-items-center rounded-(--radius) bg-white shadow-md focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-                            >
-                                <LockClosedIcon
-                                    aria-hidden
-                                    className="size-12 text-neutral-400 transition-colors group-hover:text-neutral-600"
+            <div className="flex max-h-[80vh] min-w-0 flex-col overflow-hidden rounded-3xl border bg-muted md:max-h-[720px] dark:bg-card">
+                {dossier && previewName && previewItems.length > 1 ? (
+                    // sentry-block: file names and pages may be personal, never record them.
+                    <div className="sentry-block shrink-0">
+                        <FileThumbnails
+                            items={previewItems}
+                            selected={previewName}
+                            onSelect={(name) =>
+                                setSelectedName({ dossierId: dossier.id, value: name })
+                            }
+                        />
+                    </div>
+                ) : null}
+                {/* Focusable so that keyboard users can scroll through the pages. */}
+                <div
+                    ref={previewScrollRef}
+                    role="region"
+                    aria-label="Aperçu"
+                    tabIndex={0}
+                    className="min-h-0 grow overflow-y-auto px-5 py-3 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:px-8"
+                >
+                    {/* sentry-block: never record the user's documents in Session Replay. */}
+                    <div className="sentry-block">
+                        <PreviewBoundary>
+                            {previewLocked ? (
+                                // Its size is unknown until it is opened: an A4 page.
+                                <button
+                                    type="button"
+                                    onClick={() => setIsPasswordDialogOpen(true)}
+                                    aria-label={`${previewName} : protégé par mot de passe, saisir le mot de passe`}
+                                    className="group my-4 grid aspect-[210/297] w-full cursor-pointer place-items-center rounded-(--radius) bg-white shadow-md focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                                >
+                                    <LockClosedIcon
+                                        aria-hidden
+                                        className="size-12 text-neutral-400 transition-colors group-hover:text-neutral-600"
+                                    />
+                                </button>
+                            ) : (
+                                <PDFViewer
+                                    file={previewFile?.bytes}
+                                    password={previewFile?.password}
+                                    watermarkText={watermarkText}
+                                    watermarkStyle={previewStyle}
                                 />
-                            </button>
-                        ) : (
-                            <PDFViewer
-                                file={previewFile?.bytes}
-                                password={previewFile?.password}
-                                watermarkText={watermarkText}
-                                watermarkStyle={previewStyle}
-                            />
-                        )}
-                    </PreviewBoundary>
+                            )}
+                        </PreviewBoundary>
+                    </div>
                 </div>
             </div>
             {dossier && dossier.locked.length > 0 ? (

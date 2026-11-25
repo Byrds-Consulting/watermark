@@ -38,6 +38,9 @@
   --color-highlight: var(--highlight);
   /* Inset surfaces: the drop zone and the preview tray. */
   --color-inset: var(--inset);
+  /* Password-protected files: still to unlock before they join the export. */
+  --color-warning: var(--warning);
+  --color-warning-surface: var(--warning-surface);
 
   /* Outline of controls such as the drop zone: at least 3:1 against the cards. */
   --color-control-border: var(--control-border);
@@ -66,6 +69,8 @@
         --brand: #146b0a;
         --highlight: #d4f7c8;
         --inset: #f5fbf2;
+        --warning: #b54708;
+        --warning-surface: #fef6e7;
         --border: #e4eae1;
         --control-border: #7f907a;
         --input: #d5ded1;
@@ -88,6 +93,8 @@
         --brand: #7deb66;
         --highlight: transparent;
         --inset: #0f150e;
+        --warning: #fdb022;
+        --warning-surface: #2b1d06;
         --border: #222c20;
         --control-border: #62755b;
         --input: #2f3b2c;
