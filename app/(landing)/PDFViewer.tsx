@@ -38,6 +38,9 @@ export default function PDFViewer({
         const container = containerRef.current
         if (!container) return
         setWidth(container.offsetWidth)
+        // Until the first pages are drawn, hold the space of an A4 page with its margins (like the
+        // locked-file placeholder this viewer may replace).
+        container.style.minHeight = `${(container.offsetWidth * 297) / 210 + 32}px`
         // Follow window resizes and phone rotations.
         const observer = new ResizeObserver(() => setWidth(container.offsetWidth))
         observer.observe(container)
@@ -46,8 +49,13 @@ export default function PDFViewer({
 
     useEffect(() => {
         let cancelled = false
-        // Never show the pages of the previous file while the new one loads.
-        containerRef.current?.replaceChildren()
+        const container = containerRef.current
+        if (container) {
+            // Never show the pages of the previous file while the new one loads, but keep their
+            // height until the new pages are drawn, so that the layout does not jump.
+            container.style.minHeight = `${container.offsetHeight}px`
+            container.replaceChildren()
+        }
         const task = loadPdf(source, { password })
         task.promise
             .then(async (pdf) => {
@@ -56,7 +64,8 @@ export default function PDFViewer({
             })
             .catch(() => {
                 if (cancelled) return
-                containerRef.current?.replaceChildren()
+                container?.replaceChildren()
+                if (container) container.style.minHeight = ''
                 setFailedSource(source)
             })
         return () => {
@@ -98,9 +107,11 @@ export default function PDFViewer({
                 if (pageNumber === 1) setRenderedDoc(doc)
             }
             while (container.children.length > doc.pdf.numPages) container.lastChild!.remove()
+            container.style.minHeight = ''
         })().catch(() => {
             if (cancelled) return
             container.replaceChildren()
+            container.style.minHeight = ''
             setFailedSource(source)
         })
         return () => {
@@ -115,7 +126,8 @@ export default function PDFViewer({
         <div className="PDFViewer w-full select-none pointer-events-none">
             {error ? <p className="text-sm text-center opacity-60">Aperçu indisponible pour ce fichier.</p> : null}
             {loading ? <p className="text-sm text-center opacity-60">Chargement de l’aperçu…</p> : null}
-            <div ref={containerRef} />
+            {/* flow-root: the pages' margins count in its height, which is kept while switching files. */}
+            <div ref={containerRef} className="flow-root" />
         </div>
     )
 }
