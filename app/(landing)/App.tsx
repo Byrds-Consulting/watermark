@@ -393,13 +393,17 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
                     <PreviewBoundary>
                         {previewLocked ? (
                             // Its size is unknown until it is opened: an A4 page.
-                            <div
-                                role="img"
-                                aria-label={`${previewName} : protégé par mot de passe`}
-                                className="my-4 grid aspect-[210/297] w-full place-items-center rounded-(--radius) bg-white shadow-md"
+                            <button
+                                type="button"
+                                onClick={() => setIsPasswordDialogOpen(true)}
+                                aria-label={`${previewName} : protégé par mot de passe, saisir le mot de passe`}
+                                className="group my-4 grid aspect-[210/297] w-full cursor-pointer place-items-center rounded-(--radius) bg-white shadow-md focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                             >
-                                <LockClosedIcon aria-hidden className="size-12 text-neutral-400" />
-                            </div>
+                                <LockClosedIcon
+                                    aria-hidden
+                                    className="size-12 text-neutral-400 transition-colors group-hover:text-neutral-600"
+                                />
+                            </button>
                         ) : (
                             <PDFViewer
                                 file={previewFile?.bytes}
