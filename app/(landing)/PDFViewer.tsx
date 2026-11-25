@@ -14,10 +14,12 @@ const SAMPLE_URL = '/sample.pdf'
  */
 export default function PDFViewer({
     file,
+    password,
     watermarkText,
     watermarkStyle,
 }: {
     file?: Uint8Array
+    password?: string
     watermarkText?: string
     watermarkStyle: WatermarkStyle
 }) {
@@ -46,7 +48,7 @@ export default function PDFViewer({
         let cancelled = false
         // Never show the pages of the previous file while the new one loads.
         containerRef.current?.replaceChildren()
-        const task = loadPdf(source)
+        const task = loadPdf(source, { password })
         task.promise
             .then(async (pdf) => {
                 const sizes = await getPageSizes(pdf)
@@ -62,7 +64,7 @@ export default function PDFViewer({
             setDoc(null)
             task.destroy()
         }
-    }, [source])
+    }, [source, password])
 
     useEffect(() => {
         const container = containerRef.current

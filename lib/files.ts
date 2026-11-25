@@ -8,7 +8,8 @@ import {
     pushGraphicsState,
 } from 'pdf-lib'
 
-export type SourceFile = { name: string; bytes: Uint8Array }
+/** `password`: needed to open a password-protected PDF (given by the user, kept in memory only). */
+export type SourceFile = { name: string; bytes: Uint8Array; password?: string }
 /** `archives`: the selected files that were ZIP archives (detected from their bytes). */
 export type ProcessResult = { files: SourceFile[]; rejected: string[]; archives: string[] }
 

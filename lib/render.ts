@@ -40,9 +40,10 @@ export function loadPdf(
         enableXfa = false,
         disableFontFace = false,
         worker,
-    }: { enableXfa?: boolean; disableFontFace?: boolean; worker?: pdfjs.PDFWorker } = {},
+        password,
+    }: { enableXfa?: boolean; disableFontFace?: boolean; worker?: pdfjs.PDFWorker; password?: string } = {},
 ): PDFDocumentLoadingTask {
-    const options = { ...pdfjsOptions, enableXfa, disableFontFace, worker }
+    const options = { ...pdfjsOptions, enableXfa, disableFontFace, worker, password }
     return pdfjs.getDocument(
         typeof source === 'string'
             ? { ...options, url: source }
@@ -63,6 +64,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number) {
     })
 }
 
+function isPasswordError(error: unknown) {
+    return error instanceof pdfjs.PasswordException || (error instanceof Error && error.name === 'PasswordException')
+}
+
 /** Displayed size of every page, in PDF points (crop box and /Rotate applied). */
 export async function getPageSizes(doc: PDFDocumentProxy): Promise<PageSize[]> {
     const sizes: PageSize[] = []
@@ -74,11 +79,19 @@ export async function getPageSizes(doc: PDFDocumentProxy): Promise<PageSize[]> {
 }
 
 /**
- * Whether the file can be rendered: pdf.js opens it (not protected by a user password, not corrupt),
- * it has pages, and it is not a pure XFA form (whose filled content is not drawn on the canvas, only
- * a "please wait" placeholder page).
+ * - `readable`: pdf.js opens the file, it has pages, and it is not a pure XFA form (whose filled
+ *   content is not drawn on the canvas, only a "please wait" placeholder page). A PDF with only an
+ *   owner password (printing/copying restrictions) opens without one, so it is readable.
+ * - `password`: a password is needed to open it.
+ * - `unreadable`: anything else (corrupt, pure XFA, no pages, too slow to parse).
  */
-export async function isReadablePdf(bytes: Uint8Array) {
+export type PdfStatus = 'readable' | 'password' | 'unreadable'
+
+/**
+ * Whether the file can be rendered, see `PdfStatus`. With `password`, `password` means that this
+ * password is wrong.
+ */
+export async function checkPdf(bytes: Uint8Array, password?: string): Promise<PdfStatus> {
     // XFA parsing enabled here only, so that pdf.js reports documents that need XFA rendering
     // (/NeedsRendering, XFA data and no AcroForm fields): their static page is a placeholder.
     // Documents that merely carry XFA data next to usable static pages are accepted.
@@ -94,12 +107,14 @@ export async function isReadablePdf(bytes: Uint8Array) {
         throw new PdfWorkerStartError('pdf.js worker failed to start', { cause: error })
     }
     // No fonts registered in the page: validation does not render anything.
-    const task = loadPdf(bytes, { enableXfa: true, disableFontFace: true, worker })
+    const task = loadPdf(bytes, { enableXfa: true, disableFontFace: true, worker, password })
     try {
         const doc = await withTimeout(task.promise, VALIDATION_TIMEOUT_MS)
-        return doc.numPages > 0 && !doc.isPureXfa
-    } catch {
-        return false
+        return doc.numPages > 0 && !doc.isPureXfa ? 'readable' : 'unreadable'
+    } catch (error) {
+        // Without an `onPassword` callback, pdf.js rejects with a PasswordException (checked by name:
+        // the worker's error is rebuilt on this side).
+        return isPasswordError(error) ? 'password' : 'unreadable'
     } finally {
         // Let pdf.js clean up normally, but never wait forever for it.
         await withTimeout(task.destroy(), CLEANUP_GRACE_MS).catch(() => {})

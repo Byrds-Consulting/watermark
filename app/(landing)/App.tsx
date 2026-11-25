@@ -14,7 +14,8 @@ import { DEFAULT_WATERMARK_STYLE, downloadBlob, MAX_WATERMARK_LINES, type Waterm
 import { WatermarkSettings } from '@/app/(landing)/WatermarkSettings'
 import type { SourceFile } from '@/lib/files'
 import dynamic from 'next/dynamic'
-import { ArrowDownTrayIcon } from '@heroicons/react/24/outline'
+import { ArrowDownTrayIcon, LockClosedIcon } from '@heroicons/react/24/outline'
+import { PasswordDialog, type LockedFile, type UnlockResult } from '@/app/(landing)/PasswordDialog'
 import { Button } from '@/components/ui/button'
 import { useDebounce } from '@uidotdev/usehooks'
 
@@ -24,8 +25,18 @@ const PDFViewer = dynamic(() => import('./PDFViewer'), {
     ssr: false,
 })
 
-/** The uploaded dossier. `id` changes on every upload, so stale async results can be detected. */
-type Dossier = { id: number; archiveName: string | null; files: SourceFile[] }
+/**
+ * The uploaded dossier. `id` changes on every upload, so stale async results can be detected.
+ * `files`: the PDFs to export. `locked`: the password-protected PDFs and whether they were unlocked
+ * (then also in `files`, with their password); `lockedBytes` keeps their content until then.
+ */
+type Dossier = {
+    id: number
+    archiveName: string | null
+    files: SourceFile[]
+    locked: LockedFile[]
+    lockedBytes: Map<string, Uint8Array>
+}
 /** Something that belongs to one dossier only, and must disappear when another one is uploaded. */
 type ForDossier<T> = { dossierId: number; value: T }
 
@@ -45,6 +56,7 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
     const [unsupportedChars, setUnsupportedChars] = useState<string[]>([])
     const [isUploading, setIsUploading] = useState(false)
     const [isDownloading, setIsDownloading] = useState(false)
+    const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
     const uploadId = useRef(0)
     // Default value known from the first render (server included): no "empty watermark" error flashes in.
     const { register, handleSubmit, watch } = useForm<{ watermark: string }>({
@@ -84,6 +96,7 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
             const id = ++uploadId.current
             setIsUploading(true)
             setUploadError(null)
+            setIsPasswordDialogOpen(false)
             // Loaded on demand: pdf-lib, zip.js and file-type stay out of the initial bundle.
             let filesModule: typeof import('@/lib/files') | undefined
             try {
@@ -91,16 +104,21 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
                 const { processFiles, uniqueNames } = filesModule
                 const { files, rejected, archives } = await processFiles(acceptedFiles)
                 // Keep only the PDFs that pdf.js (the preview and export renderer) can open.
-                const { isReadablePdf } = await import('@/lib/render')
+                const { checkPdf } = await import('@/lib/render')
                 setNeedsReload(false)
                 const readable: SourceFile[] = []
+                const protectedFiles: SourceFile[] = []
                 const unreadable: string[] = []
                 for (const file of files) {
-                    if (await isReadablePdf(file.bytes)) readable.push(file)
+                    const status = await checkPdf(file.bytes)
+                    if (status === 'readable') readable.push(file)
+                    else if (status === 'password') protectedFiles.push(file)
                     else unreadable.push(file.name)
                 }
                 if (id !== uploadId.current) return // a newer upload superseded this one
-                const names = uniqueNames(readable.map((file) => file.name))
+                // Unique among the protected files too: they may join the dossier later.
+                const names = uniqueNames([...readable, ...protectedFiles].map((file) => file.name))
+                const lockedNames = names.slice(readable.length)
                 // A single selected archive is downloaded back as an archive, under its name.
                 const archiveName =
                     acceptedFiles.length === 1 && archives.length === 1
@@ -108,12 +126,20 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
                         : null
                 // Replace the previous dossier even when nothing usable was found: never keep
                 // offering a download of files the user meant to replace.
-                setDossier({ id, archiveName, files: readable.map((file, idx) => ({ ...file, name: names[idx] })) })
+                setDossier({
+                    id,
+                    archiveName,
+                    files: readable.map((file, idx) => ({ ...file, name: names[idx] })),
+                    locked: lockedNames.map((name) => ({ name, status: 'locked' })),
+                    lockedBytes: new Map(lockedNames.map((name, idx) => [name, protectedFiles[idx].bytes])),
+                })
+                setIsPasswordDialogOpen(protectedFiles.length > 0)
                 const errors: string[] = []
-                if (readable.length === 0) errors.push('Aucun fichier PDF, JPEG ou PNG exploitable n’a été trouvé.')
+                if (readable.length === 0 && protectedFiles.length === 0)
+                    errors.push('Aucun fichier PDF, JPEG ou PNG exploitable n’a été trouvé.')
                 if (rejected.length > 0) errors.push(`Fichiers ignorés (format non supporté ou illisible) : ${formatList(rejected)}`)
                 if (unreadable.length > 0)
-                    errors.push(`PDF ignorés (protégés par mot de passe, formulaires XFA ou endommagés) : ${formatList(unreadable)}`)
+                    errors.push(`PDF ignorés (formulaires XFA ou endommagés) : ${formatList(unreadable)}`)
                 setUploadError(errors.length > 0 ? errors.join(' ') : null)
             } catch (error) {
                 if (id !== uploadId.current) return
@@ -136,6 +162,48 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
             }
         },
         [plausible],
+    )
+
+    /** Tries `password` on the locked file `name` (and on the other locked ones when `tryOthers`). */
+    const unlockFile = useCallback(
+        async (name: string, password: string, tryOthers: boolean): Promise<UnlockResult> => {
+            if (!dossier) return 'password'
+            const { id, locked, lockedBytes } = dossier
+            const { checkPdf } = await import('@/lib/render')
+            const targets = [
+                name,
+                ...(tryOthers ? locked.filter((f) => f.status === 'locked' && f.name !== name).map((f) => f.name) : []),
+            ]
+            const results = new Map<string, UnlockResult>()
+            for (const target of targets) {
+                const bytes = lockedBytes.get(target)
+                if (bytes) results.set(target, await checkPdf(bytes, password))
+            }
+            setDossier((current) => {
+                // A newer upload replaced the dossier, or another attempt already unlocked these files.
+                if (!current || current.id !== id) return current
+                const opened = current.locked.filter(
+                    (file) => file.status === 'locked' && results.get(file.name) === 'readable',
+                )
+                return {
+                    ...current,
+                    files: [
+                        ...current.files,
+                        ...opened.map((file) => ({ name: file.name, bytes: lockedBytes.get(file.name)!, password })),
+                    ],
+                    locked: current.locked.map((file) => {
+                        const result = file.status === 'locked' ? results.get(file.name) : undefined
+                        if (result === 'readable')
+                            return { ...file, status: 'unlocked', unlockedBy: file.name === name ? undefined : name }
+                        // Only for the typed file: the password of another file proves nothing here.
+                        if (result === 'unreadable' && file.name === name) return { ...file, status: 'unreadable' }
+                        return file
+                    }),
+                }
+            })
+            return results.get(name) ?? 'password'
+        },
+        [dossier],
     )
 
     useEffect(() => {
@@ -167,7 +235,10 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
             const failures: string[] = []
             for (const file of files) {
                 try {
-                    exported.push({ name: file.name, bytes: await flattenPdf(file.bytes, text, style) })
+                    exported.push({
+                        name: file.name,
+                        bytes: await flattenPdf(file.bytes, text, style, file.password),
+                    })
                 } catch (error) {
                     captureException(error)
                     failures.push(file.name)
@@ -221,6 +292,7 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
 
     // Preview the first file that will be exported, with the watermark as currently typed.
     const previewFile = exportableFiles[0]
+    const lockedCount = dossier ? dossier.locked.filter((file) => file.status === 'locked').length : 0
     const currentDownloadError =
         dossier && downloadError?.dossierId === dossier.id ? downloadError.value : null
 
@@ -236,6 +308,18 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
                         {dossier.archiveName ?? 'Dossier'} · {exportableFiles.length}{' '}
                         {exportableFiles.length > 1 ? 'fichiers' : 'fichier'}
                     </p>
+                ) : null}
+                {lockedCount > 0 ? (
+                    <button
+                        type="button"
+                        onClick={() => setIsPasswordDialogOpen(true)}
+                        className="-mt-3 inline-flex items-center justify-center gap-1.5 self-center rounded-md px-2 py-1 text-sm font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                        <LockClosedIcon aria-hidden className="size-4" />
+                        {lockedCount > 1
+                            ? `${lockedCount} PDF protégés par mot de passe : les déverrouiller`
+                            : '1 PDF protégé par mot de passe : le déverrouiller'}
+                    </button>
                 ) : null}
                 <div className="flex flex-col gap-2">
                     <label htmlFor="watermark" className="text-sm font-semibold">
@@ -292,10 +376,22 @@ export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
                 {/* sentry-block: never record the user's documents in Session Replay. */}
                 <div className="sentry-block">
                     <PreviewBoundary>
-                        <PDFViewer file={previewFile?.bytes} watermarkText={watermarkText} watermarkStyle={previewStyle} />
+                        <PDFViewer
+                            file={previewFile?.bytes}
+                            password={previewFile?.password}
+                            watermarkText={watermarkText} watermarkStyle={previewStyle} />
                     </PreviewBoundary>
                 </div>
             </div>
+            {dossier && dossier.locked.length > 0 ? (
+                <PasswordDialog
+                    key={dossier.id}
+                    open={isPasswordDialogOpen}
+                    files={dossier.locked}
+                    onUnlock={unlockFile}
+                    onClose={() => setIsPasswordDialogOpen(false)}
+                />
+            ) : null}
         </section>
     )
 }

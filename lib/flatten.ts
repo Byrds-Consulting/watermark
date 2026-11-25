@@ -29,8 +29,10 @@ export async function flattenPdf(
     bytes: Uint8Array,
     watermarkText: string,
     watermarkStyle: WatermarkStyle,
+    password?: string,
 ): Promise<Uint8Array> {
-    const sourceTask = loadPdf(bytes)
+    // Rendering into new pages also drops the encryption: the result opens without a password.
+    const sourceTask = loadPdf(bytes, { password })
     let overlayTask: ReturnType<typeof loadPdf> | undefined
     try {
         const source = await sourceTask.promise

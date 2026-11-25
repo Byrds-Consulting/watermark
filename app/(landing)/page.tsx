@@ -40,7 +40,7 @@ const faq = [
     },
     {
         question: 'Que faire d’un PDF protégé par mot de passe ?',
-        answer: 'Il est refusé, car le navigateur ne peut pas l’ouvrir sans le mot de passe. Ouvrez-le dans votre lecteur PDF, enregistrez une copie sans protection ou imprimez-le en PDF, puis déposez cette copie.',
+        answer: 'Déposez-le comme les autres : le site vous demande son mot de passe, qui reste dans votre navigateur. Le PDF exporté avec le filigrane n’est plus protégé, vous n’aurez pas à transmettre le mot de passe.',
     },
     {
         question: 'Faut-il installer un logiciel ?',
