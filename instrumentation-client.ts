@@ -11,8 +11,7 @@ Sentry.init({
     // `serveTunnelIntegration` in sentry.server.config.ts) to circumvent ad-blockers.
     tunnel: true,
 
-    // Add optional integrations for additional features
-    integrations: [Sentry.replayIntegration()],
+    // Session Replay is loaded once the page is idle (see below): rrweb weighs ~150 KB gzipped.
 
     // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
     tracesSampleRate: 1,
@@ -28,5 +27,17 @@ Sentry.init({
     // Setting this option to true will print useful information to the console while you're setting up Sentry.
     debug: false,
 })
+
+// Replay comes from Sentry's CDN after the page has loaded, to keep it out of the initial bundle.
+// An ad-blocker may block it: errors are still reported, without a replay.
+function loadReplay() {
+    Sentry.lazyLoadIntegration('replayIntegration')
+        .then((replayIntegration) => Sentry.addIntegration(replayIntegration()))
+        .catch(() => {})
+}
+const whenIdle = (callback: () => void) =>
+    'requestIdleCallback' in window ? requestIdleCallback(callback, { timeout: 5000 }) : setTimeout(callback, 2000)
+if (document.readyState === 'complete') whenIdle(loadReplay)
+else window.addEventListener('load', () => whenIdle(loadReplay), { once: true })
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart

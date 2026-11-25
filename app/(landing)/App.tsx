@@ -2,7 +2,6 @@
 
 import '@ungap/with-resolvers'
 
-import * as zip from '@zip.js/zip.js'
 import { captureException } from '@sentry/nextjs'
 
 import { useForm } from 'react-hook-form'
@@ -11,15 +10,9 @@ import { usePlausible } from 'next-plausible'
 
 import { FileDropzone } from '@/app/(landing)/FileDropzone'
 import { PreviewBoundary } from '@/app/(landing)/PreviewBoundary'
-import {
-    DEFAULT_WATERMARK_STYLE,
-    downloadBlob,
-    getUnsupportedWatermarkChars,
-    MAX_WATERMARK_LINES,
-    type WatermarkStyle,
-} from '@/lib/pdf'
+import { DEFAULT_WATERMARK_STYLE, downloadBlob, MAX_WATERMARK_LINES, type WatermarkStyle } from '@/lib/watermark'
 import { WatermarkSettings } from '@/app/(landing)/WatermarkSettings'
-import { isLimitError, processFiles, uniqueNames, type SourceFile } from '@/lib/files'
+import type { SourceFile } from '@/lib/files'
 import dynamic from 'next/dynamic'
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
@@ -40,7 +33,8 @@ function formatList(names: string[]) {
     return names.map((name) => `« ${name} »`).join(', ')
 }
 
-export const App = () => {
+/** `{date}` in the default watermark is replaced with today's date. */
+export const App = ({ defaultWatermark }: { defaultWatermark: string }) => {
     const [dossier, setDossier] = useState<Dossier | null>(null)
     const [uploadError, setUploadError] = useState<string | null>(null)
     // pdf.js could not start (e.g. network glitch): only a page reload recovers.
@@ -52,7 +46,10 @@ export const App = () => {
     const [isUploading, setIsUploading] = useState(false)
     const [isDownloading, setIsDownloading] = useState(false)
     const uploadId = useRef(0)
-    const { register, handleSubmit, watch } = useForm<{ watermark: string }>()
+    // Default value known from the first render (server included): no "empty watermark" error flashes in.
+    const { register, handleSubmit, watch } = useForm<{ watermark: string }>({
+        defaultValues: { watermark: defaultWatermark.replace('{date}', intl.format(new Date())) },
+    })
     const watermarkTextValue = watch('watermark') ?? ''
     const watermarkText = useDebounce<string>(watermarkTextValue, 200)
     const [watermarkStyle, setWatermarkStyle] = useState<WatermarkStyle>(DEFAULT_WATERMARK_STYLE)
@@ -87,7 +84,11 @@ export const App = () => {
             const id = ++uploadId.current
             setIsUploading(true)
             setUploadError(null)
+            // Loaded on demand: pdf-lib, zip.js and file-type stay out of the initial bundle.
+            let filesModule: typeof import('@/lib/files') | undefined
             try {
+                filesModule = await import('@/lib/files')
+                const { processFiles, uniqueNames } = filesModule
                 const { files, rejected, archives } = await processFiles(acceptedFiles)
                 // Keep only the PDFs that pdf.js (the preview and export renderer) can open.
                 const { isReadablePdf } = await import('@/lib/render')
@@ -122,12 +123,13 @@ export const App = () => {
                     setUploadError('Le lecteur PDF n’a pas pu être chargé (connexion interrompue ?).')
                     return
                 }
+                const isLimit = filesModule?.isLimitError(error) ?? false
                 setUploadError(
-                    isLimitError(error)
-                        ? `${error.message} : importez moins de fichiers à la fois.`
+                    isLimit
+                        ? `${(error as Error).message} : importez moins de fichiers à la fois.`
                         : 'Impossible de lire ces fichiers.',
                 )
-                if (!isLimitError(error)) captureException(error)
+                if (!isLimit) captureException(error)
                 plausible('File upload error')
             } finally {
                 if (id === uploadId.current) setIsUploading(false)
@@ -138,9 +140,11 @@ export const App = () => {
 
     useEffect(() => {
         let cancelled = false
-        getUnsupportedWatermarkChars(watermarkText).then((chars) => {
-            if (!cancelled) setUnsupportedChars(chars)
-        })
+        import('@/lib/pdf')
+            .then(({ getUnsupportedWatermarkChars }) => getUnsupportedWatermarkChars(watermarkText))
+            .then((chars) => {
+                if (!cancelled) setUnsupportedChars(chars)
+            })
         return () => {
             cancelled = true
         }
@@ -185,6 +189,7 @@ export const App = () => {
                 return
             }
             if (asZip) {
+                const zip = await import('@zip.js/zip.js')
                 const zipWriter = new zip.ZipWriter(new zip.BlobWriter('application/zip'))
                 for (const file of exported) {
                     await zipWriter.add(file.name, new zip.Uint8ArrayReader(file.bytes))
@@ -241,9 +246,7 @@ export const App = () => {
                         rows={3}
                         className="w-full resize-none rounded-xl border border-control-border bg-background px-4 py-3 text-[15px] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
                         placeholder="Saisissez le texte du filigrane"
-                        {...register('watermark', {
-                            value: `Valide uniquement pour dossier de location\nle ${intl.format(new Date())}`,
-                        })}
+                        {...register('watermark')}
                     ></textarea>
                 </div>
                 <WatermarkSettings style={watermarkStyle} onChange={setWatermarkStyle} />

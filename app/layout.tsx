@@ -3,6 +3,7 @@ import { Inter, Space_Grotesk } from 'next/font/google'
 import './globals.css'
 import Providers from '@/app/providers'
 import dynamic from 'next/dynamic'
+import { SITE_NAME, SITE_URL } from '@/lib/site'
 
 const fontSans = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const fontDisplay = Space_Grotesk({ subsets: ['latin'], weight: ['500', '700'], variable: '--font-space-grotesk' })
@@ -40,9 +41,10 @@ export const viewport = {
 }
 
 export const metadata: Metadata = {
-    metadataBase: new URL('https://dossierpdf.fr'),
-    keywords:
-        'dossier, pdf, filigrane, local, navigateur, sécurisé, sécurité, immobilier, location, identité, vol',
+    metadataBase: new URL(SITE_URL),
+    // Pages set their own title, description, canonical URL and social cards (lib/site.ts).
+    title: { default: SITE_NAME, template: `%s | ${SITE_NAME}` },
+    applicationName: SITE_NAME,
     authors: [
         {
             name: 'Byrds Consulting',
@@ -50,28 +52,6 @@ export const metadata: Metadata = {
         },
     ],
     creator: 'Byrds Consulting',
-    openGraph: {
-        locale: 'fr_FR',
-        url: 'https://dossierpdf.fr',
-        title: 'Dossier PDF',
-        description: 'Ajouter un texte en filigrane sur votre dossier PDF',
-        siteName: 'Dossier PDF',
-        images: [
-            {
-                url: 'https://dossierpdf.fr/img/og.png',
-                width: 1200,
-                height: 630,
-                alt: 'Dossier PDF',
-            },
-        ],
-    },
-    twitter: {
-        card: 'summary_large_image',
-        title: 'Dossier PDF',
-        description: 'Ajouter un texte en filigrane sur votre dossier PDF',
-        images: ['https://dossierpdf.fr/img/og.png'],
-        creator: '@theolubert',
-    },
     icons: {
         icon: [
             {

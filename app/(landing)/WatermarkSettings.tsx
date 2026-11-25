@@ -8,7 +8,7 @@ import {
     MULTI_COLOR_PALETTE,
     WATERMARK_LIMITS,
     type WatermarkStyle,
-} from '@/lib/pdf'
+} from '@/lib/watermark'
 import { cn } from '@/lib/utils'
 
 const multiSwatch = `conic-gradient(${MULTI_COLOR_PALETTE.map(

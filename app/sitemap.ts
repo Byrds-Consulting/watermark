@@ -1,33 +1,10 @@
-import { MetadataRoute } from 'next'
+import type { MetadataRoute } from 'next'
+import { PAGES, SITE_URL } from '@/lib/site'
 
-type ArrayElement<ArrayType extends readonly unknown[]> =
-    ArrayType extends readonly (infer ElementType)[] ? ElementType : never
-type SitemapWithDefaultsElem =
-    | string
-    | (Pick<ArrayElement<MetadataRoute.Sitemap>, 'url'> &
-          Partial<Omit<ArrayElement<MetadataRoute.Sitemap>, 'url'>>)
-
-function sitemapWithDefaults(
-    sitemap: SitemapWithDefaultsElem[],
-    defaults: Omit<ArrayElement<MetadataRoute.Sitemap>, 'url'>,
-) {
-    return sitemap.map((s) => ({
-        ...defaults,
-        ...(typeof s === 'string' ? { url: s } : s),
-    }))
-}
-
+// Google ignores `changefreq` and `priority`, and trusts `lastmod` only when it reflects real changes.
 export default function sitemap(): MetadataRoute.Sitemap {
-    return sitemapWithDefaults(
-        [
-            {
-                url: `https://dossierpdf.fr`,
-            },
-        ],
-        {
-            lastModified: new Date(),
-            changeFrequency: 'daily',
-            priority: 1,
-        },
-    )
+    return PAGES.map(({ path, lastModified }) => ({
+        url: path === '/' ? SITE_URL : `${SITE_URL}${path}`,
+        lastModified,
+    }))
 }

@@ -6,6 +6,15 @@ const nextConfig: NextConfig = {
     // Pin the workspace root: a lockfile in a parent directory would otherwise be picked up
     // and nest the standalone server under .next/standalone/<path>/server.js.
     outputFileTracingRoot: __dirname,
+    // Files of public/ are served with `max-age=0`: let browsers and social networks cache the images.
+    async headers() {
+        return [
+            {
+                source: '/img/:path*',
+                headers: [{ key: 'Cache-Control', value: 'public, max-age=604800, stale-while-revalidate=86400' }],
+            },
+        ]
+    },
     turbopack: {
         root: __dirname,
         // Use the legacy pdf.js build: the modern one requires JS APIs that only the latest browsers ship.
